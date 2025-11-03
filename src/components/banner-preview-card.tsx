@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import JSZip from "jszip";
 import { Button } from "./ui/button";
 import { Download } from "lucide-react";
@@ -15,46 +15,70 @@ export const BannerPreviewCard: React.FC<BannerVariation> = ({
   width,
   height,
 }) => {
-  const [isLoading, setIsLoading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string>("");
+  const [isLoading, setIsLoading] = useState(true);
 
-  // For generated variations, we need a way to serve them.
-  // This is a placeholder for a more complex implementation.
-  const [previewContent, setPreviewContent] = useState<string | null>(null);
+  useEffect(() => {
+    let objectUrl: string | null = null;
+    const generatePreview = async () => {
+        setIsLoading(true);
+        if (bannerId && htmlFile) {
+            setPreviewUrl(`/api/preview/${bannerId}/${htmlFile}`);
+        } else if (files && htmlFile) {
+            try {
+                const htmlContentBuffer = files[htmlFile];
+                if (!htmlContentBuffer) {
+                    throw new Error(`HTML file '${htmlFile}' not found in variation files.`);
+                }
+                const htmlContent = Buffer.isBuffer(htmlContentBuffer) ? htmlContentBuffer.toString('utf-8') : htmlContentBuffer;
 
-  const previewUrl = useMemo(() => {
-    // If it's the original uploaded banner, use the API route
-    if (bannerId && htmlFile) {
-      return `/api/preview/${bannerId}/${htmlFile}`;
-    }
-    // If it's a client-generated variation, create a blob URL
-    if (previewContent) {
-        const blob = new Blob([previewContent], { type: 'text/html' });
-        return URL.createObjectURL(blob);
-    }
-    return "";
-  }, [bannerId, htmlFile, previewContent]);
+                const blobPromises = Object.entries(files).map(async ([fileName, fileContent]) => {
+                    const mimeType = fileName.endsWith('.js') ? 'application/javascript' :
+                                   fileName.endsWith('.css') ? 'text/css' :
+                                   fileName.endsWith('.html') ? 'text/html' :
+                                   'application/octet-stream';
 
-  // Effect to create client-side previews for generated banners
-  useMemo(() => {
-    if (!bannerId && files && Object.keys(files).length > 0) {
-        // This is a simplified preview. For a full preview, we'd need to
-        // bundle all assets, which is complex on the client.
-        // Here, we just use the HTML content.
-        const html = files['index.html'] || files[Object.keys(files).find(f => f.endsWith('.html'))!] || '<html><body>Preview not available</body></html>'
-        
-        // This is a rough way to handle local assets for preview
-        const modifiedHtml = html.replace(/src="([^"]+)"/g, (match, src) => {
-            if (src.startsWith('http') || src.startsWith('data:')) {
-                return match;
+                    const blob = new Blob([fileContent], { type: mimeType });
+                    return { fileName, blob };
+                });
+
+                const blobs = await Promise.all(blobPromises);
+                const blobMap = new Map(blobs.map(({ fileName, blob }) => [fileName, URL.createObjectURL(blob)]));
+                
+                let finalHtml = htmlContent;
+
+                // Replace all local asset paths with blob URLs
+                for (const [fileName, blobUrl] of blobMap.entries()) {
+                    // Regex to find src="...", href="..." and url(...)
+                    const srcRegex = new RegExp(`src=["'](./)?${fileName}["']`, 'g');
+                    const hrefRegex = new RegExp(`href=["'](./)?${fileName}["']`, 'g');
+                    
+                    finalHtml = finalHtml.replace(srcRegex, `src="${blobUrl}"`);
+                    finalHtml = finalHtml.replace(hrefRegex, `href="${blobUrl}"`);
+                }
+
+                const finalHtmlBlob = new Blob([finalHtml], { type: 'text/html' });
+                objectUrl = URL.createObjectURL(finalHtmlBlob);
+                setPreviewUrl(objectUrl);
+
+            } catch (error) {
+                console.error("Error creating client-side preview:", error);
+                setPreviewUrl("");
             }
-            // A more robust solution would be needed here for complex banners
-            return `src="/api/preview/${name}/${src}"`
-        });
+        }
+        setIsLoading(false);
+    };
 
-        setPreviewContent(html);
-    }
-  }, [files, bannerId, name]);
+    generatePreview();
+
+    return () => {
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [name, files, bannerId, htmlFile]);
+
 
   const handleSingleDownload = async () => {
     if (!Object.keys(files).length) {
@@ -65,8 +89,6 @@ export const BannerPreviewCard: React.FC<BannerVariation> = ({
     setIsDownloading(true);
     const zip = new JSZip();
     
-    // In a real scenario, for the original banner, we'd need to fetch all assets from the server
-    // For generated banners, we only have the modified Dynamic.js
     for (const fileName in files) {
        zip.file(fileName, files[fileName]);
     }
@@ -87,11 +109,14 @@ export const BannerPreviewCard: React.FC<BannerVariation> = ({
   return (
     <div className="relative group" style={{ width: `${effectiveWidth}px`, height: `${effectiveHeight}px` }}>
       <div className="w-full h-full bg-muted rounded-md overflow-hidden border">
-        {previewUrl ? (
+        {isLoading && (
+            <div className="w-full h-full flex items-center justify-center text-muted-foreground">Loading Preview...</div>
+        )}
+        {!isLoading && previewUrl ? (
           <iframe
             src={previewUrl}
             title={name}
-            sandbox="allow-scripts allow-same-origin"
+            sandbox="allow-scripts"
             className="w-full h-full border-0"
             style={{ width: `${effectiveWidth}px`, height: `${effectiveHeight}px` }}
             scrolling="no"
@@ -99,9 +124,7 @@ export const BannerPreviewCard: React.FC<BannerVariation> = ({
             onLoad={() => setIsLoading(false)}
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-            {isLoading ? "Loading Preview..." : "Preview not available."}
-          </div>
+          !isLoading && <div className="w-full h-full flex items-center justify-center text-muted-foreground text-center p-4">Preview not available</div>
         )}
       </div>
       <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity rounded-md">

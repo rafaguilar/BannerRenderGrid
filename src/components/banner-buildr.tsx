@@ -29,12 +29,13 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-type TemplateFiles = { [key: string]: string };
+type TemplateFiles = { [key: string]: { content: string, type: 'string' | 'binary' } };
+
 export type CsvData = Record<string, string>[];
 export type ColumnMapping = Record<string, string>;
 export type BannerVariation = { 
   name: string; 
-  files: TemplateFiles; 
+  files: Record<string, string | Buffer>; 
   bannerId?: string; 
   htmlFile?: string;
   width?: number;
@@ -42,7 +43,7 @@ export type BannerVariation = {
 };
 
 export function BannerBuildr() {
-  const [templateFiles, setTemplateFiles] = useState<TemplateFiles | null>(null);
+  const [templateFiles, setTemplateFiles] = useState<Record<string, string | Buffer> | null>(null);
   const [templateFileName, setTemplateFileName] = useState<string>("");
   const [csvData, setCsvData] = useState<CsvData | null>(null);
   const [csvFileName, setCsvFileName] = useState<string>("");
@@ -56,6 +57,7 @@ export function BannerBuildr() {
   const { toast } = useToast();
   
   const [originalBanner, setOriginalBanner] = useState<BannerVariation | null>(null);
+  const [dynamicJsContent, setDynamicJsContent] = useState<string | null>(null);
 
 
   const handleTemplateUpload = async (file: File) => {
@@ -84,13 +86,28 @@ export function BannerBuildr() {
         throw new Error("Template must include an index.html file.");
       }
 
-      setTemplateFiles({ "Dynamic.js": dynamicJsContent || "" });
+      // Store the content for later use in generation
+      setDynamicJsContent(dynamicJsContent || "");
+      
+      // Extract JS variables for mapping
       setJsVariables(['devDynamicContent.parent[0].custom_offer']);
+
+      // Fetch all files for the template to enable download and variation generation
+      const zip = await JSZip.loadAsync(await file.arrayBuffer());
+      const allFiles: Record<string, string | Buffer> = {};
+      for (const filename in zip.files) {
+          const zipEntry = zip.files[filename];
+          if (!zipEntry.dir) {
+              const content = await zipEntry.async('nodebuffer');
+              allFiles[path.basename(filename)] = content;
+          }
+      }
+      setTemplateFiles(allFiles);
 
       // Generate a preview of the original template
       const originalPreview = {
           name: "Original Template Preview",
-          files: { "Dynamic.js": dynamicJsContent || "" }, // Include files for download
+          files: allFiles, 
           bannerId,
           htmlFile,
           width,
@@ -105,9 +122,7 @@ export function BannerBuildr() {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Failed to process zip file.";
       toast({ title: "Error", description: errorMessage, variant: "destructive" });
-      setTemplateFileName("");
-      setTemplateFiles(null);
-      setJsVariables([]);
+      resetState();
     } finally {
       setIsLoading(false);
     }
@@ -139,18 +154,11 @@ export function BannerBuildr() {
   };
 
   useEffect(() => {
-    const dynamicJsContent = templateFiles ? templateFiles['Dynamic.js'] : null;
-
-    if (dynamicJsContent && csvColumns.length > 0 && !isMappingComplete) {
+    if (dynamicJsContent && csvColumns.length > 0 && !columnMapping) {
       const runMapping = async () => {
         setIsLoading(true);
         setLoadingMessage("AI is mapping columns...");
         try {
-          // Check if a mapping has already been fetched to avoid re-fetching
-          if (columnMapping !== null) {
-              setIsLoading(false);
-              return;
-          }
           const mapping = await getColumnMapping({
             dynamicJsContent: dynamicJsContent,
             csvColumns: csvColumns,
@@ -171,7 +179,7 @@ export function BannerBuildr() {
       };
       runMapping();
     }
-  }, [templateFiles, csvColumns, isMappingComplete, columnMapping]);
+  }, [dynamicJsContent, csvColumns, columnMapping]);
 
 
   const handleGenerateBanners = () => {
@@ -186,14 +194,13 @@ export function BannerBuildr() {
     try {
       const newVariations: BannerVariation[] = csvData.map((row, index) => {
         const dynamicJsPath = 'Dynamic.js';
-        let newDynamicJsContent = templateFiles[dynamicJsPath] || "";
+        let newDynamicJsContent = dynamicJsContent || "";
         
         for (const csvColumn in columnMapping) {
           if (row[csvColumn] && columnMapping[csvColumn]) {
             const jsVariablePath = columnMapping[csvColumn];
             const valueToSet = row[csvColumn];
             
-            // This logic is specific to the requested variable path
             if (jsVariablePath === 'devDynamicContent.parent[0].custom_offer') {
                 const regex = /(devDynamicContent\.parent\[0\]\.custom_offer\s*=\s*['"])([^'"]*)(['"]?)/;
                 if (regex.test(newDynamicJsContent)) {
@@ -210,11 +217,12 @@ export function BannerBuildr() {
         }`.replace(/[^a-zA-Z0-9_-]/g, '');
 
         const newFiles = { ...templateFiles };
-        newFiles[dynamicJsPath] = newDynamicJsContent;
+        newFiles[dynamicJsPath] = Buffer.from(newDynamicJsContent, 'utf-8');
         
         return {
           name: variationName,
           files: newFiles,
+          htmlFile: originalBanner.htmlFile,
           width: originalBanner.width,
           height: originalBanner.height,
         };
@@ -232,7 +240,6 @@ export function BannerBuildr() {
 
 
   const handleDownloadAll = async () => {
-    // Exclude the original preview from the bulk download
     const variationsToDownload = bannerVariations.filter(v => v.name !== 'Original Template Preview');
     if (variationsToDownload.length === 0) return;
     
@@ -243,9 +250,6 @@ export function BannerBuildr() {
     for (const variation of variationsToDownload) {
       const folder = zip.folder(variation.name);
       if(folder){
-        // In a real implementation, we would need to fetch all assets from the server
-        // for each variation. This is a complex task.
-        // For now, we will just include the modified Dynamic.js
         Object.keys(variation.files).forEach(fileName => {
           folder.file(fileName, variation.files[fileName]);
         });
@@ -273,6 +277,7 @@ export function BannerBuildr() {
     setIsMappingComplete(false);
     setIsLoading(false);
     setOriginalBanner(null);
+    setDynamicJsContent(null);
   }
 
   const renderStep = (
@@ -310,7 +315,7 @@ export function BannerBuildr() {
   };
   
   const bannersGenerated = bannerVariations.length > 1;
-  const showMappingCard = csvData && templateFiles && !isMappingComplete && jsVariables.length > 0;
+  const showMappingCard = csvData && dynamicJsContent && !isMappingComplete && jsVariables.length > 0;
   const showGenerateCard = isMappingComplete;
   const isGenerating = isLoading && loadingMessage.includes('Generating');
 
