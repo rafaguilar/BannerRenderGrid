@@ -25,8 +25,10 @@ export async function POST(req: NextRequest) {
         const csvFile = formData.get('csv') as File | null;
         const columnMappingJSON = formData.get('columnMapping') as string | null;
         const dynamicJsContent = formData.get('dynamicJsContent') as string | null;
+        const tier = formData.get('tier') as 'T1' | 'T2' | null;
 
-        if (!templateFile || !csvFile || !columnMappingJSON || dynamicJsContent === null) {
+
+        if (!templateFile || !csvFile || !columnMappingJSON || dynamicJsContent === null || !tier) {
             return NextResponse.json({ error: 'Missing required form data' }, { status: 400 });
         }
         
@@ -51,17 +53,15 @@ export async function POST(req: NextRequest) {
             }
             const zipEntry = zip.files[filename];
             if (!zipEntry.dir) {
-                templateFiles[filename] = await zipEntry.async('nodebuffer');
-                if (filename.toLowerCase().endsWith('.html')) {
-                    htmlFile = filename;
+                const cleanFilename = path.basename(filename);
+                templateFiles[cleanFilename] = await zipEntry.async('nodebuffer');
+                if (cleanFilename.toLowerCase().endsWith('.html')) {
+                    htmlFile = cleanFilename;
                 }
             }
         }
         if(!htmlFile) { // fallback
-            for (const filename in zip.files) {
-                if (filename.startsWith('__MACOSX/')) {
-                    continue;
-                }
+            for (const filename in templateFiles) {
                 if(filename.toLowerCase().endsWith('.html')) {
                     htmlFile = filename;
                     break;
@@ -73,8 +73,12 @@ export async function POST(req: NextRequest) {
         const variations = await Promise.all(csvData.map(async (row, index) => {
             let newDynamicJsContent = dynamicJsContent;
             
+            // Standard mapping
             for (const csvColumn in columnMapping) {
                 if (row[csvColumn] && columnMapping[csvColumn]) {
+                     // Tier-based logic is handled separately below
+                    if (csvColumn === 'custom_offer' || csvColumn === 'offerType') continue;
+
                     const jsVariablePath = columnMapping[csvColumn];
                     const valueToSet = row[csvColumn];
 
@@ -86,6 +90,26 @@ export async function POST(req: NextRequest) {
                     }
                 }
             }
+
+            // Tier-specific mapping for custom_offer
+            const offerJsVariablePath = 'devDynamicContent.parent[0].custom_offer';
+            let offerValueToSet = '';
+            
+            if (tier === 'T1') {
+                offerValueToSet = row['custom_offer'];
+            } else if (tier === 'T2') {
+                offerValueToSet = row['offerType'];
+            }
+
+            if(offerValueToSet) {
+                 const regex = new RegExp(`(${offerJsVariablePath.replace(/\[/g, '\\[').replace(/\]/g, '\\]')}\\s*=\\s*['"])([^'"]*)(['"]?)`);
+                 if (regex.test(newDynamicJsContent)) {
+                    newDynamicJsContent = newDynamicJsContent.replace(regex, `$1${offerValueToSet}$3`);
+                } else {
+                    console.warn(`Could not find "${offerJsVariablePath}" in Dynamic.js to replace for tier logic.`);
+                }
+            }
+
 
             const variationName = `Variation_${index + 1}_${
                 row[Object.keys(row)[0]] || "data"
@@ -104,16 +128,16 @@ export async function POST(req: NextRequest) {
             let variationHtmlContent: string = '';
 
             for (const fileName in newFiles) {
-                await fs.writeFile(path.join(tmpDir, path.basename(fileName)), newFiles[fileName]);
+                await fs.writeFile(path.join(tmpDir, fileName), newFiles[fileName]);
                 if(fileName.toLowerCase().endsWith('.html')) {
-                    variationHtmlFile = path.basename(fileName);
+                    variationHtmlFile = fileName;
                     variationHtmlContent = newFiles[fileName].toString('utf-8');
                 }
             }
             if (!variationHtmlFile) { // fallback
                  for (const fileName in newFiles) {
                     if (fileName.toLowerCase().endsWith('.html')) {
-                        variationHtmlFile = path.basename(fileName);
+                        variationHtmlFile = fileName;
                         variationHtmlContent = newFiles[fileName].toString('utf-8');
                         break;
                     }

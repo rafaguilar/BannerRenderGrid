@@ -28,6 +28,8 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import JSZip from "jszip";
+import { Label } from "./ui/label";
+import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
 
 export type CsvData = Record<string, string>[];
 export type ColumnMapping = Record<string, string>;
@@ -60,6 +62,8 @@ export function BannerRenderGrid() {
   
   const [originalBanner, setOriginalBanner] = useState<BannerVariation | null>(null);
   const [dynamicJsContent, setDynamicJsContent] = useState<string | null>(null);
+  const [tier, setTier] = useState<'T1' | 'T2'>('T1');
+
 
 
   const handleTemplateUpload = async (file: File) => {
@@ -169,7 +173,7 @@ export function BannerRenderGrid() {
       };
       runMapping();
     }
-  }, [dynamicJsContent, csvColumns, columnMapping, isMappingComplete]);
+  }, [dynamicJsContent, csvColumns, columnMapping, isMappingComplete, toast]);
 
 
   const handleGenerateBanners = async () => {
@@ -187,6 +191,7 @@ export function BannerRenderGrid() {
         formData.append('csv', csvFile);
         formData.append('columnMapping', JSON.stringify(columnMapping));
         formData.append('dynamicJsContent', dynamicJsContent || '');
+        formData.append('tier', tier);
 
         const response = await fetch('/api/generate', {
             method: 'POST',
@@ -203,7 +208,6 @@ export function BannerRenderGrid() {
         setBannerVariations([originalBanner, ...newVariations]);
         toast({ title: "Success", description: `${newVariations.length} banners generated.` });
     } catch (e) {
-      console.error(e);
       const message = e instanceof Error ? e.message : "Failed to generate banners.";
       toast({ title: "Error", description: message, variant: "destructive" });
     } finally {
@@ -234,8 +238,10 @@ export function BannerRenderGrid() {
                     }
                     const filesZip = await JSZip.loadAsync(await response.arrayBuffer());
                     for (const filename in filesZip.files) {
-                        const fileData = await filesZip.files[filename].async('nodebuffer');
-                        folder.file(filename, fileData);
+                        if (!filename.startsWith('__MACOSX/')) {
+                            const fileData = await filesZip.files[filename].async('nodebuffer');
+                            folder.file(filename, fileData);
+                        }
                     }
                 } catch (error) {
                     console.error(`Error downloading variation ${variation.name}:`, error);
@@ -275,6 +281,7 @@ export function BannerRenderGrid() {
     setIsLoading(false);
     setOriginalBanner(null);
     setDynamicJsContent(null);
+    setTier('T1');
   }
 
   const renderStep = (
@@ -375,12 +382,24 @@ export function BannerRenderGrid() {
                         <CheckCircle2 className="w-8 h-8 text-green-500" />
                         <div>
                             <CardTitle className="font-headline">Mapping Complete</CardTitle>
-                            <CardDescription>All steps are complete. Ready to build!</CardDescription>
+                            <CardDescription>Select a Tier and you are ready to build!</CardDescription>
                         </div>
                     </div>
                 </CardHeader>
                 <CardContent className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <p className="text-sm text-muted-foreground">Ready to generate <strong>{csvData?.length || 0}</strong> unique banner variations.</p>
+                  <div className="space-y-2">
+                    <Label>Select Tier</Label>
+                    <RadioGroup defaultValue="T1" onValueChange={(value: 'T1' | 'T2') => setTier(value)} className="flex gap-4">
+                      <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="T1" id="t1"/>
+                        <Label htmlFor="t1">T1</Label>
+                      </div>
+                       <div className="flex items-center space-x-2">
+                        <RadioGroupItem value="T2" id="t2"/>
+                        <Label htmlFor="t2">T2</Label>
+                      </div>
+                    </RadioGroup>
+                  </div>
                     <Button onClick={handleGenerateBanners} disabled={isGenerating || bannersGenerated } size="lg">
                     {isGenerating ? <Loader2 className="mr-2 animate-spin" /> : <Wand2 className="mr-2" />}
                     {bannersGenerated ? "Banners Generated" : "Generate Banners"}
@@ -409,9 +428,9 @@ export function BannerRenderGrid() {
                     </Button>
                 )}
             </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 justify-center">
             {bannerVariations.map((variation) => (
-              <BannerPreviewCard key={variation.name} {...variation} />
+              <BannerPreviewCard key={variation.bannerId || variation.name} {...variation} />
             ))}
           </div>
         </div>
