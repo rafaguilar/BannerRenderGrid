@@ -18,7 +18,7 @@ const generateUniqueId = () => `banner-${Date.now()}-${Math.random().toString(36
 
 // Helper to get ad size from HTML content
 const getAdSize = (htmlContent: string): { width: number, height: number } => {
-    const sizeMatch = htmlContent.match(/<meta\s+name=["']ad.size["']\s+content=["']width=(\d+),height=(\d+)["']/);
+    const sizeMatch = htmlContent.match(/<meta\s+name=["']ad.size["']\s+content=["']width=(\d+),\s*height=(\d+)["']/);
     if (sizeMatch && sizeMatch[1] && sizeMatch[2]) {
         return { width: parseInt(sizeMatch[1], 10), height: parseInt(sizeMatch[2], 10) };
     }
