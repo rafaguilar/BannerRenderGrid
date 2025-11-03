@@ -61,8 +61,9 @@ export function BannerBuildr() {
       const filePromises = Object.keys(zip.files).map(async (filename) => {
         const fileData = zip.files[filename];
         if (!fileData.dir) {
+          // Normalize filename by taking the last part of the path
+          const normalizedFilename = filename.includes('/') ? filename.substring(filename.lastIndexOf('/') + 1) : filename;
           const content = await fileData.async("string");
-          const normalizedFilename = filename.split('/').pop() || filename;
           files[normalizedFilename] = content;
 
           if (normalizedFilename.toLowerCase() === "dynamic.js") {
@@ -139,7 +140,7 @@ export function BannerBuildr() {
       };
       runMapping();
     }
-  }, [templateFiles, csvColumns, toast, columnMapping]);
+  }, [templateFiles, csvColumns, columnMapping]);
 
   const handleGenerateBanners = () => {
     if (!csvData || !columnMapping || !templateFiles) {
@@ -291,7 +292,7 @@ export function BannerBuildr() {
             />
         )}
 
-        {csvData && columnMapping && !isMappingComplete && (
+        {csvData && columnMapping && !isMappingComplete && jsVariables.length > 0 && (
             <ColumnMappingCard
                 csvColumns={csvColumns}
                 jsVariables={jsVariables}
