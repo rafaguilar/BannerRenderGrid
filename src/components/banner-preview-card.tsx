@@ -43,14 +43,30 @@ export const BannerPreviewCard: React.FC<BannerVariation> = ({
       
       const fileProcessingPromises = Object.keys(memoizedFiles).map(async path => {
         const fileContent = memoizedFiles[path];
-        const isJS = path.toLowerCase().endsWith('.js');
-        const isCSS = path.toLowerCase().endsWith('.css');
-        const isSVG = path.toLowerCase().endsWith('.svg');
+        const lowerCasePath = path.toLowerCase();
+        const isJS = lowerCasePath.endsWith('.js');
+        const isCSS = lowerCasePath.endsWith('.css');
+        const isSVG = lowerCasePath.endsWith('.svg');
+        const isJPG = lowerCasePath.endsWith('.jpg') || lowerCasePath.endsWith('.jpeg');
+        const isPNG = lowerCasePath.endsWith('.png');
+        const isGIF = lowerCasePath.endsWith('.gif');
+        const isImage = isJPG || isPNG || isGIF || isSVG;
 
-        if (isJS || isCSS || isSVG) {
-          const mimeType = isJS ? 'application/javascript' : isCSS ? 'text/css' : 'image/svg+xml';
-          const blob = new Blob([fileContent], { type: mimeType });
-          const url = URL.createObjectURL(blob);
+        if (isJS || isCSS || isImage) {
+          let mimeType = 'application/octet-stream';
+          if (isJS) mimeType = 'application/javascript';
+          else if (isCSS) mimeType = 'text/css';
+          else if (isSVG) mimeType = 'image/svg+xml';
+          else if (isJPG) mimeType = 'image/jpeg';
+          else if (isPNG) mimeType = 'image/png';
+          else if (isGIF) mimeType = 'image/gif';
+          
+          // JSZip provides content as a string. For binary files like images, this can be an issue.
+          // Assuming JSZip provides a base64 string for images if they were added that way, or we get raw text.
+          // For now, creating blob from the provided content. This works for text-based assets.
+          // For binary assets, we might need to adjust how zip is read if issues persist.
+           const blob = new Blob([fileContent], { type: mimeType });
+           const url = URL.createObjectURL(blob);
           blobUrls.push(url);
 
           // Regex to replace relative paths (./, / or just the filename)
@@ -116,5 +132,3 @@ export const BannerPreviewCard: React.FC<BannerVariation> = ({
     </Card>
   );
 };
-
-    
