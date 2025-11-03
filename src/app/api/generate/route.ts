@@ -87,7 +87,6 @@ export async function POST(req: NextRequest) {
 
         // 3. Generate variations
         const variations = await Promise.all(csvData.map(async (row, index) => {
-            // Start with a fresh copy of the original dynamic.js for each variation
             let newDynamicJsContent = dynamicJsContent;
             
             // Overwrite the TIER variable first based on selection
@@ -106,12 +105,12 @@ export async function POST(req: NextRequest) {
                 if (valueToSet !== undefined && jsVariablePath) {
                     // This regex is designed to be safe and handle various JS assignment syntaxes.
                     // It looks for the variable path, an equals sign, and then a quoted string.
-                    const regex = new RegExp(`(${jsVariablePath.replace(/\[/g, '\\[').replace(/\]/g, '\\]')}\\s*=\\s*['"])([^'"]*)(['"]?)`);
+                    const regex = new RegExp(`(${jsVariablePath.replace(/\[/g, '\\[').replace(/\]/g, '\\]').replace(/\./g, '\\.')}\\s*=\\s*['"])([^'"]*)(['"]?)`);
+
                     if (regex.test(newDynamicJsContent)) {
-                        // Safely replace the content within the quotes
-                        newDynamicJsContent = newDynamicJsContent.replace(regex, `$1${valueToSet}$3`);
+                        newDynamicJsContent = newDynamicJsContent.replace(regex, `$1${valueToSet.replace(/'/g, "\\'")}$3`);
                     } else {
-                        console.warn(`Could not find "${jsVariablePath}" in Dynamic.js to replace.`);
+                        console.warn(`Could not find "${jsVariablePath}" in Dynamic.js to replace value with "${valueToSet}".`);
                     }
                 }
             }
@@ -168,5 +167,3 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: `Server error: ${message}` }, { status: 500 });
     }
 }
-
-    

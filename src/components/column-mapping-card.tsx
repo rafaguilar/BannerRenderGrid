@@ -75,28 +75,22 @@ export const ColumnMappingCard: React.FC<ColumnMappingCardProps> = ({
   
   const handleConfirm = () => {
     if (!selectedTier) {
-        // Optionally, show a toast or message to select a tier.
         return;
     }
     
-    // Create the final mapping object to be sent
     const finalMapping: ColumnMapping = { ...mapping };
 
-    // This is the crucial fix: Ensure that the mapping for both tier-specific
-    // columns is correctly set based on the selected tier, even if one is hidden.
-    const customOfferVar = jsVariables.find(v => v.includes('custom_offer'));
+    const t1Var = jsVariables.find(v => v.includes('custom_offer'));
+    const t2Var = jsVariables.find(v => v.includes('offerType'));
 
-    if(customOfferVar) {
-        if(selectedTier === 'T1') {
-            finalMapping['custom_offer'] = customOfferVar;
-            finalMapping['offerType'] = ''; // Ensure the other tier's mapping is cleared
-        } else { // T2
-            finalMapping['offerType'] = customOfferVar;
-            finalMapping['custom_offer'] = ''; // Ensure the other tier's mapping is cleared
-        }
+    if (selectedTier === 'T1' && t1Var) {
+        finalMapping['custom_offer'] = t1Var;
+        finalMapping['offerType'] = ''; 
+    } else if (selectedTier === 'T2' && t2Var) {
+        finalMapping['offerType'] = t2Var;
+        finalMapping['custom_offer'] = '';
     }
 
-    // Filter out any empty mappings before confirming
     const cleanedMapping: ColumnMapping = {};
     for (const key in finalMapping) {
         if (Object.prototype.hasOwnProperty.call(finalMapping, key) && finalMapping[key]) {
@@ -109,23 +103,29 @@ export const ColumnMappingCard: React.FC<ColumnMappingCardProps> = ({
 
   const visibleCsvColumns = useMemo(() => {
     if (!selectedTier) return [];
-
-    // Always show columns that are not tier-specific
     return csvColumns.filter(col => col !== 'custom_offer' && col !== 'offerType');
-    
   }, [selectedTier, csvColumns]);
   
-  const tierSpecificColumn = useMemo(() => {
-    if (!selectedTier) return null;
-    return selectedTier === 'T1' ? 'custom_offer' : 'offerType';
-  }, [selectedTier]);
+  const { tierSpecificColumn, tierSpecificVar } = useMemo(() => {
+    if (!selectedTier) return { tierSpecificColumn: null, tierSpecificVar: null };
+    
+    if (selectedTier === 'T1') {
+      return {
+        tierSpecificColumn: 'custom_offer',
+        tierSpecificVar: jsVariables.find(v => v.includes('custom_offer')) || null
+      };
+    } else { // T2
+      return {
+        tierSpecificColumn: 'offerType',
+        tierSpecificVar: jsVariables.find(v => v.includes('offerType')) || null
+      };
+    }
+  }, [selectedTier, jsVariables]);
 
 
   if (csvColumns.length === 0) {
     return null; 
   }
-
-  const customOfferVar = jsVariables.find(v => v.includes('custom_offer'));
 
   return (
     <Card>
@@ -173,21 +173,20 @@ export const ColumnMappingCard: React.FC<ColumnMappingCardProps> = ({
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {/* Tier-specific row shown at the top */}
-                    {tierSpecificColumn && csvColumns.includes(tierSpecificColumn) && customOfferVar && (
+                    {tierSpecificColumn && csvColumns.includes(tierSpecificColumn) && tierSpecificVar && (
                       <TableRow key={tierSpecificColumn} className="bg-primary/5">
                         <TableCell className="font-medium">{tierSpecificColumn} <Badge variant="outline" className="ml-2">Auto-mapped</Badge></TableCell>
                         <TableCell>
                           <Select
-                              value={customOfferVar}
+                              value={tierSpecificVar}
                               disabled
                           >
                               <SelectTrigger>
                               <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                  <SelectItem value={customOfferVar}>
-                                  {customOfferVar}
+                                  <SelectItem value={tierSpecificVar}>
+                                  {tierSpecificVar}
                                   </SelectItem>
                               </SelectContent>
                           </Select>
