@@ -81,6 +81,14 @@ export async function POST(req: NextRequest) {
         const variations = await Promise.all(csvData.map(async (row, index) => {
             let newDynamicJsContent = dynamicJsContent;
             
+            // !! IMPORTANT FIX: Overwrite the TIER variable first based on selection !!
+            const tierRegex = /(devDynamicContent\.parent\[0\]\.TIER\s*=\s*['"])(T[12])(['"])/;
+            if (tierRegex.test(newDynamicJsContent)) {
+                 newDynamicJsContent = newDynamicJsContent.replace(tierRegex, `$1${tier}$3`);
+            } else {
+                 console.warn(`Could not find TIER variable in Dynamic.js to replace.`);
+            }
+
             // Tier-specific value for the custom_offer variable
             const offerValue = tier === 'T1' ? row['custom_offer'] : row['offerType'];
 
