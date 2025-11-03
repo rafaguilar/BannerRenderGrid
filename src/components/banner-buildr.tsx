@@ -80,16 +80,14 @@ export function BannerBuildr() {
         if (!htmlPath || !jsPath) {
           throw new Error("Template must include index.html and Dynamic.js");
         }
-        // Assuming they are in the same directory, we can simplify this.
-        // For this fix, we will just use the content we found.
         dynamicJsContent = files[jsPath];
       }
   
       setTemplateFiles(files);
       if (dynamicJsContent) {
-        const variableRegex = /dynamicData\.([^=\s]+)/g;
+        const variableRegex = /(?:dynamicData|devDynamicContent)\.[\w\d.\[\]]+/g;
         const matches = [...dynamicJsContent.matchAll(variableRegex)];
-        const uniqueVariables = [...new Set(matches.map(match => `dynamicData.${match[1]}`))];
+        const uniqueVariables = [...new Set(matches.map(match => match[0].split('=')[0].trim()))];
         setJsVariables(uniqueVariables);
       }
       toast({ title: "Success", description: "Template uploaded successfully." });
@@ -124,7 +122,7 @@ export function BannerBuildr() {
   };
 
   useEffect(() => {
-    const dynamicJsContent = templateFiles ? (templateFiles['Dynamic.js'] || Object.values(templateFiles).find(c => c.includes('dynamicData'))) : null;
+    const dynamicJsContent = templateFiles ? (templateFiles['Dynamic.js'] || Object.values(templateFiles).find(c => c.includes('dynamicData') || c.includes('devDynamicContent'))) : null;
     if (dynamicJsContent && csvColumns.length > 0 && !columnMapping) {
       const runMapping = async () => {
         setIsLoading(true);
@@ -139,7 +137,6 @@ export function BannerBuildr() {
         } catch (e) {
             console.error(e);
             toast({ title: "AI Error", description: "Failed to map columns automatically. Please map them manually.", variant: "destructive" });
-            // Initialize with an empty mapping to allow manual entry
             setColumnMapping({}); 
         } finally {
           setIsLoading(false);
@@ -160,36 +157,22 @@ export function BannerBuildr() {
 
     try {
       const newVariations: BannerVariation[] = csvData.map((row, index) => {
-        let newDynamicJsContent = templateFiles["Dynamic.js"] ||  Object.values(templateFiles).find(c => c.includes('dynamicData')) || "";
+        let newDynamicJsContent = templateFiles["Dynamic.js"] ||  Object.values(templateFiles).find(c => c.includes('dynamicData') || c.includes('devDynamicContent')) || "";
+        
         for (const csvColumn in columnMapping) {
           if (row[csvColumn] && columnMapping[csvColumn]) {
             const jsVariablePath = columnMapping[csvColumn];
             const valueToSet = row[csvColumn];
+            
+            // Escape special characters for regex, including dots and brackets
             const escapedVarPath = jsVariablePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-            const regex = new RegExp(`(var\\s+${escapedVarPath.split('.')[1]}\\s*=|${escapedVarPath}\\s*=\\s*['"]?)([^;]*)(['"]?;)`);
             
-            // Check if the value is a number and doesn't need quotes
-            const isNumeric = !isNaN(parseFloat(valueToSet)) && isFinite(Number(valueToSet));
-            const replacementValue = isNumeric ? valueToSet : `${valueToSet}`;
+            // Regex to find variable assignment: varName = "value"; or varName: "value",
+            const regex = new RegExp(`(${escapedVarPath}\\s*[:=]\\s*['"]?)([^'"]*)(['"]?)`);
             
-            let found = false;
             newDynamicJsContent = newDynamicJsContent.replace(regex, (match, p1, p2, p3) => {
-              found = true;
-              // If it's a var declaration, we need to be careful
-              if (p1.includes('var')) {
-                 return `${p1}"${replacementValue}"${p3}`;
-              }
-               return `${p1}${replacementValue}${p3}`;
+              return `${p1}${valueToSet}${p3 || '"'}`; // Ensure value is wrapped in quotes if it wasn't
             });
-
-            if (!found) {
-                // Alternative regex for object property assignment
-                const objRegex = new RegExp(`(${jsVariablePath.split('.')[1]}\\s*:\\s*['"]?)([^,}]*)(['"]?[,}])`);
-                newDynamicJsContent = newDynamicJsContent.replace(objRegex, (match, p1, p2, p3) => {
-                    found = true;
-                    return `${p1}${valueToSet}${p3}`;
-                });
-            }
           }
         }
         const variationName = `Variation_${index + 1}_${
