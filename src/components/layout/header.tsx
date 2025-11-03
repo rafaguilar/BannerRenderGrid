@@ -12,7 +12,7 @@ export const Header: FC = () => {
                 <Rocket className="w-6 h-6" />
               </div>
               <h1 className="text-2xl font-bold font-headline text-foreground">
-                BannerBuildr
+                Banner RenderGrid
               </h1>
             </a>
           </div>
@@ -21,5 +21,3 @@ export const Header: FC = () => {
     </header>
   );
 };
-
-    

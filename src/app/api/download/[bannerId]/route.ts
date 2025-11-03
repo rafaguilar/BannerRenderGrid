@@ -19,7 +19,7 @@ export async function GET(
         return new NextResponse('Forbidden', { status: 403 });
     }
 
-    const tempBaseDir = path.join(os.tmpdir(), 'bannerbuildr-previews');
+    const tempBaseDir = path.join(os.tmpdir(), 'banner-rendergrid-previews');
     const bannerDir = path.join(tempBaseDir, bannerId);
 
     const files = await fs.readdir(bannerDir);

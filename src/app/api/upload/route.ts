@@ -1,6 +1,5 @@
 
 import { NextRequest, NextResponse } from 'next/server';
-import formidable from 'formidable';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
@@ -35,7 +34,7 @@ export async function POST(req: NextRequest) {
     }
 
     const bannerId = generateUniqueId();
-    const tmpDir = path.join(os.tmpdir(), 'bannerbuildr-previews', bannerId);
+    const tmpDir = path.join(os.tmpdir(), 'banner-rendergrid-previews', bannerId);
     await fs.mkdir(tmpDir, { recursive: true });
 
     const fileBuffer = Buffer.from(await file.arrayBuffer());

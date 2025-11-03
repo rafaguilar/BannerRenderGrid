@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
 
             // 4. Create a new temp dir for this variation and write files
             const bannerId = generateUniqueId();
-            const tmpDir = path.join(os.tmpdir(), 'bannerbuildr-previews', bannerId);
+            const tmpDir = path.join(os.tmpdir(), 'banner-rendergrid-previews', bannerId);
             await fs.mkdir(tmpDir, { recursive: true });
 
             let variationHtmlFile : string | null = null;
