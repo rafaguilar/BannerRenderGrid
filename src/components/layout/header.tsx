@@ -7,15 +7,19 @@ export const Header: FC = () => {
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center gap-3">
-            <div className="bg-primary text-primary-foreground p-2 rounded-lg">
-              <Rocket className="w-6 h-6" />
-            </div>
-            <h1 className="text-2xl font-bold font-headline text-foreground">
-              BannerBuildr
-            </h1>
+            <a href="/" className="flex items-center gap-3">
+              <div className="bg-primary text-primary-foreground p-2 rounded-lg">
+                <Rocket className="w-6 h-6" />
+              </div>
+              <h1 className="text-2xl font-bold font-headline text-foreground">
+                BannerBuildr
+              </h1>
+            </a>
           </div>
         </div>
       </div>
     </header>
   );
 };
+
+    
