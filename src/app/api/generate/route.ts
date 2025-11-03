@@ -91,11 +91,17 @@ export async function POST(req: NextRequest) {
 
             // Tier-specific value for the custom_offer variable
             const offerValue = tier === 'T1' ? row['custom_offer'] : row['offerType'];
-
+            
             if (offerValue !== undefined) {
+                // This regex will match the assignment for custom_offer and replace its value.
                 const offerRegex = new RegExp(`(devDynamicContent\\.parent\\[0\\]\\.custom_offer\\s*=\\s*['"])([^'"]*)(['"]?)`);
-                newDynamicJsContent = newDynamicJsContent.replace(offerRegex, `$1${offerValue}$3`);
+                if (offerRegex.test(newDynamicJsContent)) {
+                    newDynamicJsContent = newDynamicJsContent.replace(offerRegex, `$1${offerValue}$3`);
+                } else {
+                    console.warn(`Could not find "devDynamicContent.parent[0].custom_offer" in Dynamic.js to replace.`);
+                }
             }
+
 
             // Standard mapping for all other variables
             for (const csvColumn in columnMapping) {
