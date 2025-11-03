@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -84,15 +85,16 @@ export function BannerBuildr() {
   
       setTemplateFiles(files);
       if (dynamicJsContent) {
-        const variableRegex = /(?:const|let|var)\s+([\w$]+)\s*=|([\w$.]+(?:\s*\[\s*\d+\s*\])?[\w$.]*)\s*[:=]/g;
-        const matches = [...dynamicJsContent.matchAll(variableRegex)];
-        const extractedVariables = matches.map(match => {
-            const varName = match[1] || match[2];
-            return varName ? varName.trim().replace(/['"`=:]/g, '') : null;
-        }).filter(v => v && (v.startsWith('dynamicData.') || v.startsWith('devDynamicContent.')));
+        const variableRegex = /((devDynamicContent|dynamicData)[\w.$[\]]+)/g;
+        const matches = dynamicJsContent.match(variableRegex) || [];
+        const extractedVariables = matches.map(v => v.trim().replace(/['"`=:]/g, ''))
+            .filter(v => v && (v.startsWith('dynamicData.') || v.startsWith('devDynamicContent.')));
 
-        const uniqueVariables = [...new Set(extractedVariables)];
-        setJsVariables(uniqueVariables.filter(v => v && v.trim() !== ''));
+        const uniqueVariables = [...new Set(extractedVariables)]
+          .map(v => v.endsWith('.') ? v.slice(0, -1) : v) // Remove trailing dots
+          .filter(v => v && v.trim() !== '' && v.includes('.')); // Ensure it's not empty and is a nested property
+        
+        setJsVariables(uniqueVariables);
       }
       toast({ title: "Success", description: "Template uploaded successfully." });
     } catch (error) {
