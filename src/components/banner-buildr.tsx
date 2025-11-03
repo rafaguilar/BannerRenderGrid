@@ -16,13 +16,13 @@ import {
 } from "@/components/ui/card";
 import { FileUploadZone } from "./file-upload-zone";
 import { BannerPreviewCard } from "./banner-preview-card";
+import { ColumnMappingCard } from "./column-mapping-card";
 import {
   Archive,
   FileText,
   Loader2,
   Download,
   CheckCircle2,
-  XCircle,
   Wand2,
   List,
 } from "lucide-react";
@@ -30,7 +30,7 @@ import { useToast } from "@/hooks/use-toast";
 
 type TemplateFiles = { [key: string]: string };
 export type CsvData = Record<string, string>[];
-type ColumnMapping = Record<string, string>;
+export type ColumnMapping = Record<string, string>;
 export type BannerVariation = { name: string; files: TemplateFiles };
 
 export function BannerBuildr() {
@@ -39,14 +39,12 @@ export function BannerBuildr() {
   const [csvData, setCsvData] = useState<CsvData | null>(null);
   const [csvFileName, setCsvFileName] = useState<string>("");
   const [csvColumns, setCsvColumns] = useState<string[]>([]);
-  const [columnMapping, setColumnMapping] = useState<ColumnMapping | null>(
-    null
-  );
-  const [bannerVariations, setBannerVariations] = useState<BannerVariation[]>(
-    []
-  );
+  const [jsVariables, setJsVariables] = useState<string[]>([]);
+  const [columnMapping, setColumnMapping] = useState<ColumnMapping | null>(null);
+  const [bannerVariations, setBannerVariations] = useState<BannerVariation[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("");
+  const [isMappingComplete, setIsMappingComplete] = useState(false);
   const { toast } = useToast();
 
   const handleTemplateUpload = async (file: File) => {
@@ -56,21 +54,44 @@ export function BannerBuildr() {
     try {
       const zip = await JSZip.loadAsync(file);
       const files: TemplateFiles = {};
+      let dynamicJsContent: string | null = null;
+  
       const filePromises = Object.keys(zip.files).map(async (filename) => {
         const fileData = zip.files[filename];
         if (!fileData.dir) {
-          // Use the base name of the file as the key
-          const baseName = filename.split('/').pop() || filename;
-          files[baseName] = await fileData.async("string");
+          const baseName = filename.split("/").pop() || filename;
+          const content = await fileData.async("string");
+          files[baseName] = content;
+          if (baseName === "Dynamic.js") {
+            dynamicJsContent = content;
+          }
         }
       });
       await Promise.all(filePromises);
-
-      if (!files["Dynamic.js"] || !files["index.html"]) {
-        throw new Error("Template must include index.html and Dynamic.js");
+  
+      const rootIndexHtml = files["index.html"];
+      const rootDynamicJs = files["Dynamic.js"];
+  
+      if (!rootIndexHtml || !rootDynamicJs) {
+        // If not in root, search in subdirectories
+        const htmlPath = Object.keys(files).find(path => path.endsWith('index.html'));
+        const jsPath = Object.keys(files).find(path => path.endsWith('Dynamic.js'));
+        
+        if (!htmlPath || !jsPath) {
+          throw new Error("Template must include index.html and Dynamic.js");
+        }
+        // Assuming they are in the same directory, we can simplify this.
+        // For this fix, we will just use the content we found.
+        dynamicJsContent = files[jsPath];
       }
-
+  
       setTemplateFiles(files);
+      if (dynamicJsContent) {
+        const variableRegex = /dynamicData\.([^=\s]+)/g;
+        const matches = [...dynamicJsContent.matchAll(variableRegex)];
+        const uniqueVariables = [...new Set(matches.map(match => `dynamicData.${match[1]}`))];
+        setJsVariables(uniqueVariables);
+      }
       toast({ title: "Success", description: "Template uploaded successfully." });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Failed to process zip file.";
@@ -103,30 +124,34 @@ export function BannerBuildr() {
   };
 
   useEffect(() => {
-    if (templateFiles && templateFiles["Dynamic.js"] && csvColumns.length > 0) {
+    const dynamicJsContent = templateFiles ? (templateFiles['Dynamic.js'] || Object.values(templateFiles).find(c => c.includes('dynamicData'))) : null;
+    if (dynamicJsContent && csvColumns.length > 0 && !columnMapping) {
       const runMapping = async () => {
         setIsLoading(true);
         setLoadingMessage("AI is mapping columns...");
         try {
           const mapping = await getColumnMapping({
-            dynamicJsContent: templateFiles["Dynamic.js"],
+            dynamicJsContent: dynamicJsContent,
             csvColumns: csvColumns,
           });
           setColumnMapping(mapping);
-          toast({ title: "AI Complete", description: "Column mapping successful." });
+          toast({ title: "AI Complete", description: "Column mapping attempted." });
         } catch (e) {
-          toast({ title: "AI Error", description: "Failed to map columns automatically.", variant: "destructive" });
+            console.error(e);
+            toast({ title: "AI Error", description: "Failed to map columns automatically. Please map them manually.", variant: "destructive" });
+            // Initialize with an empty mapping to allow manual entry
+            setColumnMapping({}); 
         } finally {
           setIsLoading(false);
         }
       };
       runMapping();
     }
-  }, [templateFiles, csvColumns, toast]);
+  }, [templateFiles, csvColumns, toast, columnMapping]);
 
   const handleGenerateBanners = () => {
     if (!csvData || !columnMapping || !templateFiles) {
-        toast({ title: "Warning", description: "Please upload both template and data files first.", variant: "destructive" });
+        toast({ title: "Warning", description: "Please complete all previous steps.", variant: "destructive" });
         return;
     };
 
@@ -135,17 +160,36 @@ export function BannerBuildr() {
 
     try {
       const newVariations: BannerVariation[] = csvData.map((row, index) => {
-        let newDynamicJsContent = templateFiles["Dynamic.js"] || "";
+        let newDynamicJsContent = templateFiles["Dynamic.js"] ||  Object.values(templateFiles).find(c => c.includes('dynamicData')) || "";
         for (const csvColumn in columnMapping) {
-          if (row[csvColumn]) {
+          if (row[csvColumn] && columnMapping[csvColumn]) {
             const jsVariablePath = columnMapping[csvColumn];
             const valueToSet = row[csvColumn];
             const escapedVarPath = jsVariablePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-            const regex = new RegExp(`(${escapedVarPath}\\s*=\\s*['"]?)([^;]*)(['"]?;)`);
-            newDynamicJsContent = newDynamicJsContent.replace(
-              regex,
-              `$1${valueToSet}$3`
-            );
+            const regex = new RegExp(`(var\\s+${escapedVarPath.split('.')[1]}\\s*=|${escapedVarPath}\\s*=\\s*['"]?)([^;]*)(['"]?;)`);
+            
+            // Check if the value is a number and doesn't need quotes
+            const isNumeric = !isNaN(parseFloat(valueToSet)) && isFinite(Number(valueToSet));
+            const replacementValue = isNumeric ? valueToSet : `${valueToSet}`;
+            
+            let found = false;
+            newDynamicJsContent = newDynamicJsContent.replace(regex, (match, p1, p2, p3) => {
+              found = true;
+              // If it's a var declaration, we need to be careful
+              if (p1.includes('var')) {
+                 return `${p1}"${replacementValue}"${p3}`;
+              }
+               return `${p1}${replacementValue}${p3}`;
+            });
+
+            if (!found) {
+                // Alternative regex for object property assignment
+                const objRegex = new RegExp(`(${jsVariablePath.split('.')[1]}\\s*:\\s*['"]?)([^,}]*)(['"]?[,}])`);
+                newDynamicJsContent = newDynamicJsContent.replace(objRegex, (match, p1, p2, p3) => {
+                    found = true;
+                    return `${p1}${valueToSet}${p3}`;
+                });
+            }
           }
         }
         const variationName = `Variation_${index + 1}_${
@@ -160,6 +204,7 @@ export function BannerBuildr() {
       setBannerVariations(newVariations);
       toast({ title: "Success", description: `${newVariations.length} banners generated.` });
     } catch (e) {
+      console.error(e);
       toast({ title: "Error", description: "Failed to generate banners.", variant: "destructive" });
     } finally {
       setIsLoading(false);
@@ -193,12 +238,15 @@ export function BannerBuildr() {
     setCsvData(null);
     setCsvFileName("");
     setCsvColumns([]);
+    setJsVariables([]);
     setColumnMapping(null);
     setBannerVariations([]);
+    setIsMappingComplete(false);
     setIsLoading(false);
   }
 
   const renderStep = (
+    step: number,
     title: string,
     description: string,
     isComplete: boolean,
@@ -210,8 +258,8 @@ export function BannerBuildr() {
           {isComplete ? (
             <CheckCircle2 className="w-8 h-8 text-green-500" />
           ) : (
-            <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">
-                {isLoading && loadingMessage.includes(title.toLowerCase().split(' ')[0]) ? <Loader2 className="animate-spin" /> : '•'}
+            <div className={`w-8 h-8 rounded-full ${isComplete ? 'bg-green-500' : 'bg-primary'} text-primary-foreground flex items-center justify-center font-bold text-lg`}>
+                {step}
             </div>
           )}
           <div>
@@ -239,7 +287,7 @@ export function BannerBuildr() {
         </p>
       </div>
       <div className="space-y-4 max-w-4xl mx-auto">
-        {renderStep("Step 1: Upload Template", "Upload your compressed (.zip) banner template.", !!templateFiles, 
+        {renderStep(1, "Upload Template", "Upload your compressed (.zip) banner template.", !!templateFiles, 
             <FileUploadZone
             onFileUpload={handleTemplateUpload}
             title="Upload Template"
@@ -249,7 +297,7 @@ export function BannerBuildr() {
             />
         )}
 
-        {templateFiles && renderStep("Step 2: Upload Data", "Import a .csv file with your variable data.", !!csvData,
+        {templateFiles && renderStep(2, "Upload Data", "Import a .csv file with your variable data.", !!csvData,
             <FileUploadZone
             onFileUpload={handleDataUpload}
             title="Upload Data File"
@@ -259,21 +307,37 @@ export function BannerBuildr() {
             />
         )}
 
-        {columnMapping && (
+        {csvData && columnMapping && !isMappingComplete && (
+            <ColumnMappingCard
+                csvColumns={csvColumns}
+                jsVariables={jsVariables}
+                initialMapping={columnMapping}
+                onMappingConfirm={(finalMapping) => {
+                    setColumnMapping(finalMapping);
+                    setIsMappingComplete(true);
+                    toast({ title: "Mapping Confirmed", description: "Ready to generate banners." });
+                }}
+            />
+        )}
+
+
+        {isMappingComplete && (
             <Card>
                 <CardHeader>
                     <div className="flex items-center gap-4">
-                    <Wand2 className="w-8 h-8 text-primary" />
-                    <div>
-                        <CardTitle className="font-headline">Step 3: Generate Banners</CardTitle>
-                        <CardDescription>Our AI has mapped the data columns to your template variables. Ready to build!</CardDescription>
-                    </div>
+                        <div className={`w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold text-lg`}>
+                            4
+                        </div>
+                        <div>
+                            <CardTitle className="font-headline">Generate Banners</CardTitle>
+                            <CardDescription>All steps are complete. Ready to build!</CardDescription>
+                        </div>
                     </div>
                 </CardHeader>
                 <CardContent className="flex flex-col sm:flex-row items-center justify-between gap-4">
                     <p className="text-sm text-muted-foreground">Ready to generate <strong>{csvData?.length || 0}</strong> unique banner variations.</p>
-                    <Button onClick={handleGenerateBanners} disabled={isLoading} size="lg">
-                    {isLoading ? <Loader2 className="mr-2 animate-spin" /> : <Wand2 className="mr-2" />}
+                    <Button onClick={handleGenerateBanners} disabled={isLoading || bannerVariations.length > 0} size="lg">
+                    {isLoading && loadingMessage.includes('Generating') ? <Loader2 className="mr-2 animate-spin" /> : <Wand2 className="mr-2" />}
                     Generate Banners
                     </Button>
                 </CardContent>
@@ -320,5 +384,3 @@ export function BannerBuildr() {
     </div>
   );
 }
-
-    
