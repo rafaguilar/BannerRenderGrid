@@ -30,6 +30,7 @@ import { Check, Loader2 } from "lucide-react";
 import type { Tier } from "./banner-render-grid";
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
 import { Label } from "./ui/label";
+import { Badge } from "./ui/badge";
 
 type ColumnMapping = Record<string, string>;
 
@@ -233,5 +234,3 @@ export const ColumnMappingCard: React.FC<ColumnMappingCardProps> = ({
     </Card>
   );
 };
-
-    
