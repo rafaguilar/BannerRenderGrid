@@ -84,28 +84,28 @@ export async function POST(req: NextRequest) {
             // Standard mapping
             for (const csvColumn in columnMapping) {
                 const jsVariablePath = columnMapping[csvColumn];
-                let valueToSet: string | undefined = undefined;
-
-                if (jsVariablePath === 'devDynamicContent.parent[0].custom_offer') {
-                    if (tier === 'T1' && csvColumn === 'custom_offer') {
-                        valueToSet = row['custom_offer'];
-                    } else if (tier === 'T2' && csvColumn === 'offerType') {
-                        valueToSet = row['offerType'];
-                    }
-                } else if (row[csvColumn]) {
-                    valueToSet = row[csvColumn];
-                }
+                let valueToSet: string | undefined = row[csvColumn];
 
                 if (valueToSet !== undefined) {
-                    const regex = new RegExp(`(${jsVariablePath.replace(/\[/g, '\\[').replace(/\]/g, '\\]')}\\s*=\\s*['"])([^'"]*)(['"]?)`);
-                    if (regex.test(newDynamicJsContent)) {
-                        newDynamicJsContent = newDynamicJsContent.replace(regex, `$1${valueToSet}$3`);
+                     // The special JS variable that needs tier-specific logic
+                    if (jsVariablePath === 'devDynamicContent.parent[0].custom_offer') {
+                        // For T1, the csvColumn is 'custom_offer'
+                        // For T2, the csvColumn is 'offerType'
+                        // The value from the correct column is already in `valueToSet`
+                         const regex = new RegExp(`(devDynamicContent\\.parent\\[0\\]\\.custom_offer\\s*=\\s*['"])([^'"]*)(['"]?)`);
+                         newDynamicJsContent = newDynamicJsContent.replace(regex, `$1${valueToSet}$3`);
+
                     } else {
-                        console.warn(`Could not find "${jsVariablePath}" in Dynamic.js to replace.`);
+                        // Standard replacement for all other variables
+                        const regex = new RegExp(`(${jsVariablePath.replace(/\[/g, '\\[').replace(/\]/g, '\\]')}\\s*=\\s*['"])([^'"]*)(['"]?)`);
+                        if (regex.test(newDynamicJsContent)) {
+                            newDynamicJsContent = newDynamicJsContent.replace(regex, `$1${valueToSet}$3`);
+                        } else {
+                            console.warn(`Could not find "${jsVariablePath}" in Dynamic.js to replace.`);
+                        }
                     }
                 }
             }
-
 
             const variationName = `Variation_${index + 1}_${
                 row[Object.keys(row)[0]] || "data"
