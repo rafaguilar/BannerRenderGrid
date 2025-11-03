@@ -54,6 +54,9 @@ export function BannerBuildr() {
   const [loadingMessage, setLoadingMessage] = useState("");
   const [isMappingComplete, setIsMappingComplete] = useState(false);
   const { toast } = useToast();
+  
+  const [originalBanner, setOriginalBanner] = useState<BannerVariation | null>(null);
+
 
   const handleTemplateUpload = async (file: File) => {
     resetState();
@@ -85,16 +88,17 @@ export function BannerBuildr() {
       setJsVariables(['devDynamicContent.parent[0].custom_offer']);
 
       // Generate a preview of the original template
-      setBannerVariations([
-        {
+      const originalPreview = {
           name: "Original Template Preview",
-          files: {}, // Files are on server, not needed on client
+          files: { "Dynamic.js": dynamicJsContent || "" }, // Include files for download
           bannerId,
           htmlFile,
           width,
           height,
-        },
-      ]);
+        };
+
+      setOriginalBanner(originalPreview);
+      setBannerVariations([originalPreview]);
       
       toast({ title: "Success", description: "Template uploaded and preview generated." });
 
@@ -113,7 +117,7 @@ export function BannerBuildr() {
     setIsLoading(true);
     setLoadingMessage("Parsing data file...");
     setCsvFileName(file.name);
-    setBannerVariations([]); // Clear preview
+    setBannerVariations(originalBanner ? [originalBanner] : []); // Reset to original preview
     setColumnMapping(null); // Reset mapping
     setIsMappingComplete(false); // Reset mapping confirmation
     
@@ -137,11 +141,16 @@ export function BannerBuildr() {
   useEffect(() => {
     const dynamicJsContent = templateFiles ? templateFiles['Dynamic.js'] : null;
 
-    if (dynamicJsContent && csvColumns.length > 0 && !columnMapping && !isMappingComplete) {
+    if (dynamicJsContent && csvColumns.length > 0 && !isMappingComplete) {
       const runMapping = async () => {
         setIsLoading(true);
         setLoadingMessage("AI is mapping columns...");
         try {
+          // Check if a mapping has already been fetched to avoid re-fetching
+          if (columnMapping !== null) {
+              setIsLoading(false);
+              return;
+          }
           const mapping = await getColumnMapping({
             dynamicJsContent: dynamicJsContent,
             csvColumns: csvColumns,
@@ -164,8 +173,9 @@ export function BannerBuildr() {
     }
   }, [templateFiles, csvColumns, isMappingComplete, columnMapping]);
 
+
   const handleGenerateBanners = () => {
-    if (!csvData || !columnMapping || !templateFiles) {
+    if (!csvData || !columnMapping || !templateFiles || !originalBanner) {
         toast({ title: "Warning", description: "Please complete all previous steps.", variant: "destructive" });
         return;
     };
@@ -174,7 +184,6 @@ export function BannerBuildr() {
     setLoadingMessage(`Generating ${csvData.length} banners...`);
 
     try {
-      const originalBanner = bannerVariations[0] || {};
       const newVariations: BannerVariation[] = csvData.map((row, index) => {
         const dynamicJsPath = 'Dynamic.js';
         let newDynamicJsContent = templateFiles[dynamicJsPath] || "";
@@ -210,7 +219,8 @@ export function BannerBuildr() {
           height: originalBanner.height,
         };
       });
-      setBannerVariations(newVariations);
+      // Prepend the original banner to the list of variations for display
+      setBannerVariations([originalBanner, ...newVariations]);
       toast({ title: "Success", description: `${newVariations.length} banners generated.` });
     } catch (e) {
       console.error(e);
@@ -220,15 +230,22 @@ export function BannerBuildr() {
     }
   };
 
+
   const handleDownloadAll = async () => {
-    if (bannerVariations.length === 0) return;
+    // Exclude the original preview from the bulk download
+    const variationsToDownload = bannerVariations.filter(v => v.name !== 'Original Template Preview');
+    if (variationsToDownload.length === 0) return;
+    
     setIsLoading(true);
     setLoadingMessage("Preparing all banners for download...");
     const zip = new JSZip();
-    for (const variation of bannerVariations) {
+
+    for (const variation of variationsToDownload) {
       const folder = zip.folder(variation.name);
       if(folder){
-        // Ensure folder creation before adding files
+        // In a real implementation, we would need to fetch all assets from the server
+        // for each variation. This is a complex task.
+        // For now, we will just include the modified Dynamic.js
         Object.keys(variation.files).forEach(fileName => {
           folder.file(fileName, variation.files[fileName]);
         });
@@ -255,6 +272,7 @@ export function BannerBuildr() {
     setBannerVariations([]);
     setIsMappingComplete(false);
     setIsLoading(false);
+    setOriginalBanner(null);
   }
 
   const renderStep = (
@@ -290,7 +308,8 @@ export function BannerBuildr() {
         </Card>
       )
   };
-
+  
+  const bannersGenerated = bannerVariations.length > 1;
   const showMappingCard = csvData && templateFiles && !isMappingComplete && jsVariables.length > 0;
   const showGenerateCard = isMappingComplete;
   const isGenerating = isLoading && loadingMessage.includes('Generating');
@@ -360,16 +379,16 @@ export function BannerBuildr() {
                 </CardHeader>
                 <CardContent className="flex flex-col sm:flex-row items-center justify-between gap-4">
                     <p className="text-sm text-muted-foreground">Ready to generate <strong>{csvData?.length || 0}</strong> unique banner variations.</p>
-                    <Button onClick={handleGenerateBanners} disabled={isGenerating || (bannerVariations.length > 0 && !!csvData) } size="lg">
+                    <Button onClick={handleGenerateBanners} disabled={isGenerating || bannersGenerated } size="lg">
                     {isGenerating ? <Loader2 className="mr-2 animate-spin" /> : <Wand2 className="mr-2" />}
-                    {bannerVariations.length > 0 && !!csvData ? "Banners Generated" : "Generate Banners"}
+                    {bannersGenerated ? "Banners Generated" : "Generate Banners"}
                     </Button>
                 </CardContent>
             </Card>
         )}
       </div>
 
-      {loadingMessage && isLoading && (
+      {isLoading && !isGenerating && (
         <div className="flex items-center justify-center gap-2 text-muted-foreground">
             <Loader2 className="animate-spin" />
             <span>{loadingMessage}</span>
@@ -380,11 +399,11 @@ export function BannerBuildr() {
         <div className="space-y-8 pt-8">
             <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
                 <h3 className="text-3xl font-bold font-headline text-center sm:text-left">
-                    {csvData ? "Your Generated Banners" : "Template Preview"}
+                    {bannersGenerated ? "Your Generated Banners" : "Template Preview"}
                 </h3>
-                {csvData && (
+                {bannersGenerated && (
                      <Button onClick={handleDownloadAll} disabled={isLoading}>
-                        <Download className="mr-2" /> Download All ({bannerVariations.length})
+                        <Download className="mr-2" /> Download All ({bannerVariations.length -1})
                     </Button>
                 )}
             </div>
@@ -409,3 +428,5 @@ export function BannerBuildr() {
     </div>
   );
 }
+
+    
