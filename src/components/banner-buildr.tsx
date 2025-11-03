@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -59,10 +58,10 @@ export function BannerBuildr() {
       let hasIndexHtml = false;
   
       const filePromises = Object.keys(zip.files).map(async (filename) => {
-        const fileData = zip.files[filename];
-        if (!fileData.dir) {
-          // Normalize filename by taking the last part of the path
-          const normalizedFilename = filename.includes('/') ? filename.substring(filename.lastIndexOf('/') + 1) : filename;
+        if (!zip.files[filename].dir) {
+          const fileData = zip.files[filename];
+          // Find the last part of the path to handle nested files
+          const normalizedFilename = filename.substring(filename.lastIndexOf('/') + 1) || filename;
           const content = await fileData.async("string");
           files[normalizedFilename] = content;
 
@@ -369,3 +368,5 @@ export function BannerBuildr() {
     </div>
   );
 }
+
+    
