@@ -45,6 +45,10 @@ export async function POST(req: NextRequest) {
         let htmlFile: string | null = null;
 
         for (const filename in zip.files) {
+             // Skip macOS-specific metadata files
+            if (filename.startsWith('__MACOSX/')) {
+                continue;
+            }
             const zipEntry = zip.files[filename];
             if (!zipEntry.dir) {
                 templateFiles[filename] = await zipEntry.async('nodebuffer');
@@ -55,6 +59,9 @@ export async function POST(req: NextRequest) {
         }
         if(!htmlFile) { // fallback
             for (const filename in zip.files) {
+                if (filename.startsWith('__MACOSX/')) {
+                    continue;
+                }
                 if(filename.toLowerCase().endsWith('.html')) {
                     htmlFile = filename;
                     break;

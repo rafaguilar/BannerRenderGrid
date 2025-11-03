@@ -46,6 +46,11 @@ export async function POST(req: NextRequest) {
     let htmlContent: string | null = null;
 
     for (const filename in zip.files) {
+      // Skip macOS-specific metadata files
+      if (filename.startsWith('__MACOSX/')) {
+        continue;
+      }
+      
       const zipEntry = zip.files[filename];
       if (!zipEntry.dir) {
         const content = await zipEntry.async('nodebuffer');
@@ -64,6 +69,9 @@ export async function POST(req: NextRequest) {
     // Fallback if index.html is not found
     if (!htmlFile) {
         for (const filename in zip.files) {
+            if (filename.startsWith('__MACOSX/')) {
+                continue;
+            }
             if (filename.toLowerCase().endsWith('.html')) {
                 htmlFile = path.basename(filename);
                 htmlContent = await zip.file(filename)!.async('string');
