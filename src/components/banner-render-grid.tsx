@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import JSZip from "jszip";
+import { Badge } from "./ui/badge";
 
 export type CsvData = Record<string, string>[];
 export type ColumnMapping = Record<string, string>;
@@ -285,6 +286,15 @@ export function BannerRenderGrid() {
     setDynamicJsContent(null);
     setTier(null);
   }
+  
+    const filteredCsvColumns = tier
+    ? csvColumns.filter((col) => {
+        if (tier === "T1") return col === "custom_offer";
+        if (tier === "T2") return col === "offerType";
+        return true;
+      })
+    : [];
+
 
   const renderStep = (
     step: number,
@@ -313,7 +323,14 @@ export function BannerRenderGrid() {
             </div>
           </CardHeader>
           {showContent && <CardContent>{content}</CardContent>}
-          {isComplete && templateFileName && title.includes('Template') && <CardContent><p className="text-sm text-muted-foreground flex items-center"><Archive className="w-4 h-4 mr-2"/>{templateFileName} {tier && `(${tier} Detected)`}</p></CardContent>}
+          {isComplete && templateFileName && title.includes('Template') && 
+            <CardContent>
+                <div className="flex items-center">
+                    <p className="text-sm text-muted-foreground flex items-center"><Archive className="w-4 h-4 mr-2"/>{templateFileName}</p>
+                    {tier && <Badge variant="outline" className="ml-2">{tier} Detected</Badge>}
+                </div>
+            </CardContent>
+          }
           {isComplete && csvFileName && title.includes('Data') && <CardContent><p className="text-sm text-muted-foreground flex items-center"><List className="w-4 h-4 mr-2"/>{csvFileName} ({csvData?.length} rows)</p></CardContent>}
 
         </Card>
@@ -365,7 +382,7 @@ export function BannerRenderGrid() {
 
         {showMappingCard && (
             <ColumnMappingCard
-                csvColumns={csvColumns}
+                csvColumns={filteredCsvColumns}
                 jsVariables={jsVariables}
                 initialMapping={columnMapping || {}}
                 onMappingConfirm={(finalMapping) => {
