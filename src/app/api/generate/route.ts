@@ -79,6 +79,7 @@ export async function POST(req: NextRequest) {
 
         // 3. Generate variations
         const variations = await Promise.all(csvData.map(async (row, index) => {
+            // Start with a fresh copy of the original dynamic.js for each variation
             let newDynamicJsContent = dynamicJsContent;
             
             // Overwrite the TIER variable first based on selection
