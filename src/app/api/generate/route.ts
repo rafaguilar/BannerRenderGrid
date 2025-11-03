@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
         const variations = await Promise.all(csvData.map(async (row, index) => {
             let newDynamicJsContent = dynamicJsContent;
             
-            // !! IMPORTANT FIX: Overwrite the TIER variable first based on selection !!
+            // Overwrite the TIER variable first based on selection
             const tierRegex = /(devDynamicContent\.parent\[0\]\.TIER\s*=\s*['"])(T[12])(['"])/;
             if (tierRegex.test(newDynamicJsContent)) {
                  newDynamicJsContent = newDynamicJsContent.replace(tierRegex, `$1${tier}$3`);
