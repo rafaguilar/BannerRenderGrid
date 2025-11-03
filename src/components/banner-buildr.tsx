@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -58,13 +59,17 @@ export function BannerBuildr() {
       const filePromises = Object.keys(zip.files).map(async (filename) => {
         const fileData = zip.files[filename];
         if (!fileData.dir) {
-          files[filename] = await fileData.async("string");
+          // Use the base name of the file as the key
+          const baseName = filename.split('/').pop() || filename;
+          files[baseName] = await fileData.async("string");
         }
       });
       await Promise.all(filePromises);
+
       if (!files["Dynamic.js"] || !files["index.html"]) {
         throw new Error("Template must include index.html and Dynamic.js");
       }
+
       setTemplateFiles(files);
       toast({ title: "Success", description: "Template uploaded successfully." });
     } catch (error) {
@@ -315,3 +320,5 @@ export function BannerBuildr() {
     </div>
   );
 }
+
+    
