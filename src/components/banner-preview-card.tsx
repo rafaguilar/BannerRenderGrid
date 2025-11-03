@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -32,39 +33,23 @@ export const BannerPreviewCard: React.FC<BannerVariation> = ({
     
     // Create blobs for CSS and JS files and generate object URLs
     const blobUrls: string[] = [];
+    const scriptBlobs: {[key: string]: string} = {};
 
-    const stylePaths = Object.keys(files).filter(path => path.endsWith('.css'));
-    const styleTags = stylePaths.map(path => {
-        const blob = new Blob([files[path]], { type: 'text/css' });
-        const url = URL.createObjectURL(blob);
-        blobUrls.push(url);
-        return `<link rel="stylesheet" href="${url}">`;
-    }).join('\n');
-
-    if (finalHtml.includes("</head>")) {
-      finalHtml = finalHtml.replace("</head>", `${styleTags}\n</head>`);
-    } else {
-      finalHtml = `<head>${styleTags}</head>${finalHtml}`;
-    }
-
-    const scriptPaths = Object.keys(files).filter(path => path.endsWith('.js'));
-    const scriptTags = scriptPaths.map(path => {
+    Object.keys(files).filter(path => path.endsWith('.js')).forEach(path => {
         const blob = new Blob([files[path]], { type: 'application/javascript' });
         const url = URL.createObjectURL(blob);
         blobUrls.push(url);
-        // Ensure Dynamic.js is loaded first if it exists
-        if (path.endsWith('Dynamic.js')) {
-            return `<script src="${url}" id="Dynamic.js"></script>`;
-        }
-        return `<script src="${url}"></script>`;
-    }).sort((a,b) => a.includes('Dynamic.js') ? -1 : 1).join('\n');
+        scriptBlobs[path] = url;
+        finalHtml = finalHtml.replace(new RegExp(`src=["'](./)?${path}["']`), `src="${url}"`);
+    })
 
-    if (finalHtml.includes("</body>")) {
-      finalHtml = finalHtml.replace("</body>", `${scriptTags}\n</body>`);
-    } else {
-      finalHtml += scriptTags;
-    }
-
+    Object.keys(files).filter(path => path.endsWith('.css')).forEach(path => {
+        const blob = new Blob([files[path]], { type: 'text/css' });
+        const url = URL.createObjectURL(blob);
+        blobUrls.push(url);
+        finalHtml = finalHtml.replace(new RegExp(`href=["'](./)?${path}["']`), `href="${url}"`);
+    })
+    
     setSrcDoc(finalHtml);
 
     return () => {
@@ -114,3 +99,5 @@ export const BannerPreviewCard: React.FC<BannerVariation> = ({
     </Card>
   );
 };
+
+    

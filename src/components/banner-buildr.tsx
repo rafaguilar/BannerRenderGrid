@@ -60,8 +60,9 @@ export function BannerBuildr() {
         const fileData = zip.files[filename];
         if (!fileData.dir) {
           const content = await fileData.async("string");
-          files[filename] = content;
-          if (filename.endsWith("Dynamic.js")) {
+          const cleanFilename = filename.split('/').pop() || filename;
+          files[cleanFilename] = content;
+          if (cleanFilename.endsWith("Dynamic.js")) {
             dynamicJsContent = content;
           }
         }
@@ -83,10 +84,15 @@ export function BannerBuildr() {
   
       setTemplateFiles(files);
       if (dynamicJsContent) {
-        const variableRegex = /(?:dynamicData|devDynamicContent)\.[\w\d.\[\]]+/g;
+        const variableRegex = /(?:const|let|var)\s+([\w$]+)\s*=|([\w$.]+(?:\s*\[\s*\d+\s*\])?[\w$.]*)\s*[:=]/g;
         const matches = [...dynamicJsContent.matchAll(variableRegex)];
-        const uniqueVariables = [...new Set(matches.map(match => match[0].split('=')[0].trim()))];
-        setJsVariables(uniqueVariables.filter(v => v));
+        const extractedVariables = matches.map(match => {
+            const varName = match[1] || match[2];
+            return varName ? varName.trim().replace(/['"`=:]/g, '') : null;
+        }).filter(v => v && (v.startsWith('dynamicData.') || v.startsWith('devDynamicContent.')));
+
+        const uniqueVariables = [...new Set(extractedVariables)];
+        setJsVariables(uniqueVariables.filter(v => v && v.trim() !== ''));
       }
       toast({ title: "Success", description: "Template uploaded successfully." });
     } catch (error) {
@@ -120,7 +126,9 @@ export function BannerBuildr() {
   };
 
   useEffect(() => {
-    const dynamicJsContent = templateFiles ? (Object.values(templateFiles).find(c => c.includes('dynamicData') || c.includes('devDynamicContent'))) : null;
+    const dynamicJsPath = templateFiles ? Object.keys(templateFiles).find(p => p.endsWith('Dynamic.js')) : null;
+    const dynamicJsContent = dynamicJsPath && templateFiles ? templateFiles[dynamicJsPath] : null;
+
     if (dynamicJsContent && csvColumns.length > 0 && !columnMapping) {
       const runMapping = async () => {
         setIsLoading(true);
@@ -383,3 +391,5 @@ export function BannerBuildr() {
     </div>
   );
 }
+
+    
