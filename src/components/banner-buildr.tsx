@@ -59,28 +59,26 @@ export function BannerBuildr() {
       const filePromises = Object.keys(zip.files).map(async (filename) => {
         const fileData = zip.files[filename];
         if (!fileData.dir) {
-          const baseName = filename.split("/").pop() || filename;
           const content = await fileData.async("string");
-          files[baseName] = content;
-          if (baseName === "Dynamic.js") {
+          files[filename] = content;
+          if (filename.endsWith("Dynamic.js")) {
             dynamicJsContent = content;
           }
         }
       });
       await Promise.all(filePromises);
   
-      const rootIndexHtml = files["index.html"];
-      const rootDynamicJs = files["Dynamic.js"];
-  
-      if (!rootIndexHtml || !rootDynamicJs) {
-        // If not in root, search in subdirectories
-        const htmlPath = Object.keys(files).find(path => path.endsWith('index.html'));
-        const jsPath = Object.keys(files).find(path => path.endsWith('Dynamic.js'));
-        
-        if (!htmlPath || !jsPath) {
-          throw new Error("Template must include index.html and Dynamic.js");
-        }
-        dynamicJsContent = files[jsPath];
+      if (!dynamicJsContent) {
+          const jsPath = Object.keys(files).find(path => path.endsWith('Dynamic.js'));
+          if(jsPath) {
+            dynamicJsContent = files[jsPath];
+          }
+      }
+      
+      const hasIndexHtml = Object.keys(files).some(path => path.endsWith('index.html'));
+
+      if (!hasIndexHtml || !dynamicJsContent) {
+        throw new Error("Template must include index.html and Dynamic.js");
       }
   
       setTemplateFiles(files);
@@ -88,7 +86,7 @@ export function BannerBuildr() {
         const variableRegex = /(?:dynamicData|devDynamicContent)\.[\w\d.\[\]]+/g;
         const matches = [...dynamicJsContent.matchAll(variableRegex)];
         const uniqueVariables = [...new Set(matches.map(match => match[0].split('=')[0].trim()))];
-        setJsVariables(uniqueVariables);
+        setJsVariables(uniqueVariables.filter(v => v));
       }
       toast({ title: "Success", description: "Template uploaded successfully." });
     } catch (error) {
@@ -122,7 +120,7 @@ export function BannerBuildr() {
   };
 
   useEffect(() => {
-    const dynamicJsContent = templateFiles ? (templateFiles['Dynamic.js'] || Object.values(templateFiles).find(c => c.includes('dynamicData') || c.includes('devDynamicContent'))) : null;
+    const dynamicJsContent = templateFiles ? (Object.values(templateFiles).find(c => c.includes('dynamicData') || c.includes('devDynamicContent'))) : null;
     if (dynamicJsContent && csvColumns.length > 0 && !columnMapping) {
       const runMapping = async () => {
         setIsLoading(true);
@@ -157,7 +155,8 @@ export function BannerBuildr() {
 
     try {
       const newVariations: BannerVariation[] = csvData.map((row, index) => {
-        let newDynamicJsContent = templateFiles["Dynamic.js"] ||  Object.values(templateFiles).find(c => c.includes('dynamicData') || c.includes('devDynamicContent')) || "";
+        const dynamicJsPath = Object.keys(templateFiles).find(path => path.endsWith('Dynamic.js')) || 'Dynamic.js';
+        let newDynamicJsContent = templateFiles[dynamicJsPath] || "";
         
         for (const csvColumn in columnMapping) {
           if (row[csvColumn] && columnMapping[csvColumn]) {
@@ -168,20 +167,33 @@ export function BannerBuildr() {
             const escapedVarPath = jsVariablePath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
             
             // Regex to find variable assignment: varName = "value"; or varName: "value",
-            const regex = new RegExp(`(${escapedVarPath}\\s*[:=]\\s*['"]?)([^'"]*)(['"]?)`);
-            
+            const regex = new RegExp(`(${escapedVarPath}\\s*[:=]\\s*['"])([^'"]*)(['"]?)`);
+
+            let found = false;
             newDynamicJsContent = newDynamicJsContent.replace(regex, (match, p1, p2, p3) => {
-              return `${p1}${valueToSet}${p3 || '"'}`; // Ensure value is wrapped in quotes if it wasn't
+              found = true;
+              // Ensure value is wrapped in quotes
+              return `${p1}${valueToSet}${p3 || "'"}`;
             });
+
+            // Fallback for simple assignment without quotes if regex fails
+            if (!found) {
+               const simpleAssignmentRegex = new RegExp(`(${escapedVarPath}\\s*=\\s*)[^;]*;`);
+               newDynamicJsContent = newDynamicJsContent.replace(simpleAssignmentRegex, `$1'${valueToSet}';`);
+            }
           }
         }
+        
         const variationName = `Variation_${index + 1}_${
           row[Object.keys(row)[0]] || "data"
         }`.replace(/[^a-zA-Z0-9_-]/g, '');
 
+        const newFiles = { ...templateFiles };
+        newFiles[dynamicJsPath] = newDynamicJsContent;
+        
         return {
           name: variationName,
-          files: { ...templateFiles, "Dynamic.js": newDynamicJsContent },
+          files: newFiles,
         };
       });
       setBannerVariations(newVariations);
@@ -201,8 +213,12 @@ export function BannerBuildr() {
     const zip = new JSZip();
     for (const variation of bannerVariations) {
       const folder = zip.folder(variation.name);
-      for (const fileName in variation.files) {
-        folder?.file(fileName, variation.files[fileName]);
+      if(folder){
+        for (const fileName in variation.files) {
+            // Get base name of the file
+            const baseName = fileName.split('/').pop() || fileName;
+            folder.file(baseName, variation.files[fileName]);
+        }
       }
     }
     const blob = await zip.generateAsync({ type: "blob" });

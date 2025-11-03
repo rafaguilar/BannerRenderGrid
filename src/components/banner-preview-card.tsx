@@ -21,38 +21,43 @@ export const BannerPreviewCard: React.FC<BannerVariation> = ({
   const [srcDoc, setSrcDoc] = useState("");
 
   useEffect(() => {
-    const {
-      "index.html": indexHtml,
-      "style.css": styleCss,
-      "script.js": scriptJs,
-      "Dynamic.js": dynamicJs,
-      ...rest
-    } = files;
 
-    if (!indexHtml) {
-      setSrcDoc("<html><body>Error: index.html not found in template.</body></html>");
+    const indexHtmlPath = Object.keys(files).find(path => path.endsWith('index.html'));
+    let finalHtml = indexHtmlPath ? files[indexHtmlPath] : "<html><body>Error: index.html not found in template.</body></html>";
+    
+    if (!indexHtmlPath) {
+      setSrcDoc(finalHtml);
       return;
     }
+    
+    // Create blobs for CSS and JS files and generate object URLs
+    const blobUrls: string[] = [];
 
-    let finalHtml = indexHtml;
+    const stylePaths = Object.keys(files).filter(path => path.endsWith('.css'));
+    const styleTags = stylePaths.map(path => {
+        const blob = new Blob([files[path]], { type: 'text/css' });
+        const url = URL.createObjectURL(blob);
+        blobUrls.push(url);
+        return `<link rel="stylesheet" href="${url}">`;
+    }).join('\n');
 
-    const styleTag = `<style>${styleCss || ""}</style>`;
     if (finalHtml.includes("</head>")) {
-      finalHtml = finalHtml.replace("</head>", `${styleTag}\n</head>`);
+      finalHtml = finalHtml.replace("</head>", `${styleTags}\n</head>`);
     } else {
-      finalHtml = `<head>${styleTag}</head>${finalHtml}`;
+      finalHtml = `<head>${styleTags}</head>${finalHtml}`;
     }
 
-    const allScripts = [
-      { id: "Dynamic.js", content: dynamicJs },
-      { id: "script.js", content: scriptJs },
-      ...Object.entries(rest).map(([fileName, fileContent]) => ({ id: fileName, content: fileContent }))
-    ];
-
-    const scriptTags = allScripts
-      .filter((s) => s.content)
-      .map((s) => `<script id="${s.id}">${s.content}</script>`)
-      .join("\n");
+    const scriptPaths = Object.keys(files).filter(path => path.endsWith('.js'));
+    const scriptTags = scriptPaths.map(path => {
+        const blob = new Blob([files[path]], { type: 'application/javascript' });
+        const url = URL.createObjectURL(blob);
+        blobUrls.push(url);
+        // Ensure Dynamic.js is loaded first if it exists
+        if (path.endsWith('Dynamic.js')) {
+            return `<script src="${url}" id="Dynamic.js"></script>`;
+        }
+        return `<script src="${url}"></script>`;
+    }).sort((a,b) => a.includes('Dynamic.js') ? -1 : 1).join('\n');
 
     if (finalHtml.includes("</body>")) {
       finalHtml = finalHtml.replace("</body>", `${scriptTags}\n</body>`);
@@ -61,12 +66,18 @@ export const BannerPreviewCard: React.FC<BannerVariation> = ({
     }
 
     setSrcDoc(finalHtml);
+
+    return () => {
+      blobUrls.forEach(url => URL.revokeObjectURL(url));
+    };
   }, [files]);
 
   const handleDownload = async () => {
     const zip = new JSZip();
     for (const fileName in files) {
-      zip.file(fileName, files[fileName]);
+       // Get base name of the file
+       const baseName = fileName.split('/').pop() || fileName;
+       zip.file(baseName, files[fileName]);
     }
     const blob = await zip.generateAsync({ type: "blob" });
     const link = document.createElement("a");
@@ -88,7 +99,7 @@ export const BannerPreviewCard: React.FC<BannerVariation> = ({
           <iframe
             srcDoc={srcDoc}
             title={name}
-            sandbox="allow-scripts"
+            sandbox="allow-scripts allow-same-origin"
             className="w-full h-full"
             loading="lazy"
           />
