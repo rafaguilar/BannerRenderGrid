@@ -86,17 +86,17 @@ export async function POST(req: NextRequest) {
                     if (modifiedLine.includes(fullVariablePath)) {
                         let valueToSet = dataRow[key];
 
-                        // Prepend base path if it's an image
-                        const isImage = valueToSet && typeof valueToSet === 'string' && (valueToSet.endsWith('.jpg') || valueToSet.endsWith('.png') || valueToSet.endsWith('.svg'));
+                        console.log(`[Processing] Key: ${key}, Original Value: "${valueToSet}"`);
                         
-                        if (isImage) {
-                            console.log(`[Image Debug] Original value for ${key}:`, valueToSet);
-                            console.log(`[Image Debug] Base folder path:`, baseFolderPath);
-                        }
+                        // Trim the value before checks
+                        const trimmedValue = (typeof valueToSet === 'string') ? valueToSet.trim() : valueToSet;
 
+                        // Prepend base path if it's an image
+                        const isImage = trimmedValue && typeof trimmedValue === 'string' && (trimmedValue.endsWith('.jpg') || trimmedValue.endsWith('.png') || trimmedValue.endsWith('.svg'));
+                        
                         if (baseFolderPath && isImage) {
-                            valueToSet = baseFolderPath + valueToSet;
-                             console.log(`[Image Debug] Final value for ${key}:`, valueToSet);
+                            valueToSet = baseFolderPath + trimmedValue;
+                            console.log(`[Image Found] Prepended base path for ${key}. New Value: "${valueToSet}"`);
                         }
 
                         // Reconstruct the entire line to ensure valid syntax
