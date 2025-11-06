@@ -153,10 +153,8 @@ export function DynBannerBuilder() {
         // Creative Data
         formData.append('creativeData', JSON.stringify(sheetData[parentSheetUrl]?.[creativeTab]?.[creativeRow - 1] || {}));
 
-        // OMS Data (if T2)
-        if (selectedTier === 'T2') {
-             formData.append('omsData', JSON.stringify(sheetData[omsSheetUrl]?.[omsTab]?.[omsRow - 1] || {}));
-        }
+        // OMS Data
+        formData.append('omsData', JSON.stringify(sheetData[omsSheetUrl]?.[omsTab]?.[omsRow - 1] || {}));
         
         const response = await fetch('/api/generate-from-sheets', {
             method: 'POST',
@@ -203,7 +201,7 @@ export function DynBannerBuilder() {
                 </div>
                 </div>
                 <div className="space-y-2">
-                <Label htmlFor="oms-sheet-url">OMS (T2 Offers) Sheet URL</Label>
+                <Label htmlFor="oms-sheet-url">OMS (Offers) Sheet URL</Label>
                 <div className="flex items-center gap-2">
                     <Database className="text-muted-foreground" />
                     <Input id="oms-sheet-url" value={omsSheetUrl} onChange={e => setOmsSheetUrl(e.target.value)} />
@@ -289,21 +287,19 @@ export function DynBannerBuilder() {
                     </div>
                 </div>
 
-                 {/* OMS (T2 only) */}
-                {selectedTier === 'T2' && (
-                     <div className="p-4 border rounded-lg space-y-2">
-                        <Label className="font-medium">OMS Data</Label>
-                        <div className="flex gap-2">
-                            <Select value={omsTab} onValueChange={setOmsTab}>
-                                <SelectTrigger><SelectValue placeholder="Select tab..." /></SelectTrigger>
-                                <SelectContent>
-                                    {availableOmsTabs.map(tab => <SelectItem key={tab} value={tab}>{tab}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                            <Input type="number" value={omsRow} onChange={e => setOmsRow(Math.max(1, parseInt(e.target.value) || 1))} className="w-24" />
-                        </div>
+                 {/* OMS */}
+                 <div className="p-4 border rounded-lg space-y-2">
+                    <Label className="font-medium">OMS Data</Label>
+                    <div className="flex gap-2">
+                        <Select value={omsTab} onValueChange={setOmsTab}>
+                            <SelectTrigger><SelectValue placeholder="Select tab..." /></SelectTrigger>
+                            <SelectContent>
+                                {availableOmsTabs.map(tab => <SelectItem key={tab} value={tab}>{tab}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                        <Input type="number" value={omsRow} onChange={e => setOmsRow(Math.max(1, parseInt(e.target.value) || 1))} className="w-24" />
                     </div>
-                )}
+                </div>
             </CardContent>
              <CardFooter>
                 <Button onClick={handleGenerate} disabled={isLoading} className="ml-auto" size="lg">

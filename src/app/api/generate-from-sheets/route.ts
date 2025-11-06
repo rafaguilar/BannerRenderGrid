@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
 
         const parentData = JSON.parse(formData.get('parentData') as string || '{}');
         const creativeData = JSON.parse(formData.get('creativeData') as string || '{}');
-        const omsData = tier === 'T2' ? JSON.parse(formData.get('omsData') as string || '{}') : {};
+        const omsData = JSON.parse(formData.get('omsData') as string || '{}');
 
         if (!templateFile || !dynamicJsContent || !tier) {
             return NextResponse.json({ error: 'Missing required form data' }, { status: 400 });
@@ -74,9 +74,9 @@ export async function POST(req: NextRequest) {
             for (const key in dataRow) {
                  const value = dataRow[key];
                  // Regex to find and replace devDynamicContent.objPath.key = "value";
-                 const regex = new RegExp(`(devDynamicContent\\.${objPath}\\.${key}\\s*=\\s*['"])([^'"]*)(['"])`);
+                 const regex = new RegExp(`(devDynamicContent\\.${objPath.replace(/\[/g, '\\[').replace(/\]/g, '\\]')}\\.${key}\\s*=\\s*['"])([^'"]*)(['"])`);
                  if (regex.test(newDynamicJsContent)) {
-                    newDynamicJsContent = newDynamicJsContent.replace(regex, `$1${value.replace(/'/g, "\\'")}$3`);
+                    newDynamicJsContent = newDynamicJsContent.replace(regex, `$1${String(value).replace(/'/g, "\\'")}$3`);
                  }
             }
         }
