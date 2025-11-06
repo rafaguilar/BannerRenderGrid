@@ -88,14 +88,14 @@ export async function POST(req: NextRequest) {
 
                         console.log(`[Processing] Key: ${key}, Original Value: "${valueToSet}"`);
                         
-                        // Trim the value before checks
-                        const trimmedValue = (typeof valueToSet === 'string') ? valueToSet.trim() : valueToSet;
+                        // Force to string and trim
+                        const valueAsString = String(valueToSet || '').trim();
 
                         // Prepend base path if it's an image
-                        const isImage = trimmedValue && typeof trimmedValue === 'string' && (trimmedValue.endsWith('.jpg') || trimmedValue.endsWith('.png') || trimmedValue.endsWith('.svg'));
+                        const isImage = valueAsString.endsWith('.jpg') || valueAsString.endsWith('.png') || valueAsString.endsWith('.svg');
                         
                         if (baseFolderPath && isImage) {
-                            valueToSet = baseFolderPath + trimmedValue;
+                            valueToSet = baseFolderPath + valueAsString;
                             console.log(`[Image Found] Prepended base path for ${key}. New Value: "${valueToSet}"`);
                         }
 
