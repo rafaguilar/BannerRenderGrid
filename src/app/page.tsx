@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { Header } from '@/components/layout/header';
 import { BannerRenderGrid } from '@/components/banner-render-grid'; // CSV flow
 import { DynBannerBuilder } from '@/components/dyn-banner-builder'; // GSheet flow
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { List, Database } from 'lucide-react';
 
 export type BuildMode = 'csv' | 'gsheet';
@@ -29,17 +29,20 @@ export default function Home() {
           <Tabs value={mode} onValueChange={(value) => setMode(value as BuildMode)} className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="csv">
-                <List className="mr-2" /> From CSV
+                <List className="mr-2 h-4 w-4" /> From CSV
               </TabsTrigger>
               <TabsTrigger value="gsheet">
-                 <Database className="mr-2" /> From Google Sheet
+                 <Database className="mr-2 h-4 w-4" /> From Google Sheet
               </TabsTrigger>
             </TabsList>
+            <TabsContent value="csv">
+                <BannerRenderGrid />
+            </TabsContent>
+             <TabsContent value="gsheet">
+                <DynBannerBuilder />
+            </TabsContent>
           </Tabs>
         </div>
-        
-        {mode === 'csv' && <BannerRenderGrid />}
-        {mode === 'gsheet' && <DynBannerBuilder />}
 
       </main>
       <footer className="py-4 border-t">
