@@ -17,7 +17,7 @@ export default function Home() {
     <div className="flex flex-col min-h-screen bg-background">
       <Header />
       <main className="flex-1 container mx-auto px-4 py-8 md:py-12">
-        <div className="max-w-4xl mx-auto mb-8">
+        <div className="max-w-4xl mx-auto">
             <div className="text-left mb-8">
               <h2 className="text-4xl font-bold tracking-tight font-headline">
                 Dyn Banner RenderGrid

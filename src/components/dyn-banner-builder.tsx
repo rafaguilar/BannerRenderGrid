@@ -12,7 +12,7 @@ import {
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { Wand2, Loader2, Database, RefreshCw, Sheet } from 'lucide-react';
+import { Wand2, Loader2, Database, RefreshCw, Sheet, Archive } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Select,
@@ -25,6 +25,7 @@ import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import type { BannerVariation, Tier } from './banner-render-grid';
 import { BannerPreviewCard } from './banner-preview-card';
 import Papa from 'papaparse';
+import { FileUploadZone } from './file-upload-zone';
 
 type SheetData = Record<string, Record<string, any[]>>; // { sheetUrl -> { tabName -> [rows] } }
 
@@ -49,6 +50,8 @@ export function DynBannerBuilder() {
   const [bannerVariations, setBannerVariations] = useState<BannerVariation[]>([]);
   const [templateFile, setTemplateFile] = useState<File | null>(null);
   const [dynamicJsContent, setDynamicJsContent] = useState<string | null>(null);
+  const [templateFileName, setTemplateFileName] = useState('');
+
 
   const availableParentTabs = useMemo(() => Object.keys(sheetData[parentSheetUrl] || {}), [sheetData, parentSheetUrl]);
   const availableOmsTabs = useMemo(() => Object.keys(sheetData[omsSheetUrl] || {}), [sheetData, omsSheetUrl]);
@@ -98,6 +101,7 @@ export function DynBannerBuilder() {
   
   const handleTemplateUpload = async (file: File) => {
     setTemplateFile(file);
+    setTemplateFileName(file.name);
     setIsLoading(true);
     setLoadingMessage('Processing template...');
     try {
@@ -116,6 +120,7 @@ export function DynBannerBuilder() {
         toast({ title: 'Template Ready', description: 'Template has been processed.' });
     } catch (error) {
         setTemplateFile(null);
+        setTemplateFileName('');
         toast({ title: 'Error', description: 'Could not process template file.', variant: 'destructive' });
     } finally {
         setIsLoading(false);
@@ -183,34 +188,53 @@ export function DynBannerBuilder() {
       <div className="space-y-4 max-w-4xl mx-auto">
         <Card>
           <CardHeader>
-            <CardTitle className="font-headline">1. Connect to Google Sheets</CardTitle>
+            <CardTitle className="font-headline">1. Connect to Google Sheets & Template</CardTitle>
             <CardDescription>
-              Paste the URLs of your public Google Sheets and upload your banner template.
+              Paste your sheet URLs, upload your banner template, and fetch the data.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="parent-sheet-url">Parent & Creative Data Sheet URL</Label>
-              <div className="flex items-center gap-2">
-                <Database className="text-muted-foreground" />
-                <Input id="parent-sheet-url" value={parentSheetUrl} onChange={e => setParentSheetUrl(e.target.value)} />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="oms-sheet-url">OMS (T2 Offers) Sheet URL</Label>
-              <div className="flex items-center gap-2">
-                <Database className="text-muted-foreground" />
-                <Input id="oms-sheet-url" value={omsSheetUrl} onChange={e => setOmsSheetUrl(e.target.value)} />
-              </div>
+          <CardContent className="space-y-6">
+            <div className="space-y-4">
+                <div className="space-y-2">
+                <Label htmlFor="parent-sheet-url">Parent & Creative Data Sheet URL</Label>
+                <div className="flex items-center gap-2">
+                    <Database className="text-muted-foreground" />
+                    <Input id="parent-sheet-url" value={parentSheetUrl} onChange={e => setParentSheetUrl(e.target.value)} />
+                </div>
+                </div>
+                <div className="space-y-2">
+                <Label htmlFor="oms-sheet-url">OMS (T2 Offers) Sheet URL</Label>
+                <div className="flex items-center gap-2">
+                    <Database className="text-muted-foreground" />
+                    <Input id="oms-sheet-url" value={omsSheetUrl} onChange={e => setOmsSheetUrl(e.target.value)} />
+                </div>
+                </div>
             </div>
              <div className="space-y-2">
                 <Label>Banner Template (.zip)</Label>
-                <Input type="file" accept=".zip" onChange={e => e.target.files && handleTemplateUpload(e.target.files[0])} className="w-full" />
-                {templateFile && <p className="text-sm text-muted-foreground">Loaded: {templateFile.name}</p>}
+                 {!templateFile ? (
+                    <FileUploadZone
+                        onFileUpload={handleTemplateUpload}
+                        title="Upload Template"
+                        description="Drag & drop a .zip file or click to select"
+                        accept=".zip"
+                        Icon={Archive}
+                        />
+                ) : (
+                    <div className="flex items-center justify-center text-center p-8 border-2 border-dashed rounded-lg bg-secondary/50">
+                        <div className="flex flex-col items-center gap-2 text-secondary-foreground">
+                            <Archive className="w-8 h-8" />
+                            <p className="font-medium">{templateFileName}</p>
+                            <Button variant="link" size="sm" onClick={() => { setTemplateFile(null); setTemplateFileName(''); setDynamicJsContent(null); }}>
+                                Upload a different file
+                            </Button>
+                        </div>
+                    </div>
+                )}
              </div>
           </CardContent>
            <CardFooter>
-            <Button onClick={handleFetchData} disabled={isLoading} className="ml-auto">
+            <Button onClick={handleFetchData} disabled={isLoading || !templateFile} className="ml-auto">
               {isLoading && loadingMessage.includes('Fetching') ? <Loader2 className="animate-spin mr-2" /> : <Sheet className="mr-2"/>}
               Fetch Sheet Data
             </Button>
