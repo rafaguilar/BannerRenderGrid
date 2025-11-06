@@ -69,23 +69,29 @@ export async function POST(req: NextRequest) {
             'OMS[0]': omsData,
         };
 
-        // Replace placeholders in Dynamic.js
+        const lines = newDynamicJsContent.split('\n');
+
+        // Replace placeholders in Dynamic.js using a line-by-line replacement
         for (const [objPath, dataRow] of Object.entries(combinedData)) {
             for (const key in dataRow) {
                  const value = dataRow[key];
-                 if (value === undefined) continue;
+                 if (value === undefined || value === null) continue;
 
-                 // Regex to find devDynamicContent.objPath.key = "any value" or 'any value' or an empty string "" or '';
-                 const regex = new RegExp(`(devDynamicContent\\.${objPath.replace(/\[/g, '\\[').replace(/\]/g, '\\]')}\\.${key}\\s*=\\s*)((['"])(?:[^'"]*|\\')*\\3|(['"])(?:[^"]*|\\")*\\4)`);
-
-                 const stringValue = String(value).replace(/'/g, "\\'");
-
-                 if (regex.test(newDynamicJsContent)) {
-                    // Replace the value, keeping the original quotes
-                    newDynamicJsContent = newDynamicJsContent.replace(regex, `$1'${stringValue}'`);
+                 const fullVariablePath = `devDynamicContent.${objPath}.${key}`;
+                 
+                 for (let i = 0; i < lines.length; i++) {
+                     if (lines[i].includes(fullVariablePath)) {
+                         // Escape backslashes and single quotes in the value
+                         const escapedValue = String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                         // Reconstruct the line with the new value, ensuring it's quoted
+                         lines[i] = `${fullVariablePath} = '${escapedValue}';`;
+                         break; 
+                     }
                  }
             }
         }
+        
+        newDynamicJsContent = lines.join('\n');
         
         // 3. Create a new temp dir for this variation and write files
         const bannerId = generateUniqueId();
@@ -93,7 +99,10 @@ export async function POST(req: NextRequest) {
         await fs.mkdir(tmpDir, { recursive: true });
 
         const newFiles = { ...templateFiles };
-        newFiles[dynamicJsPath] = Buffer.from(newDynamicJsContent, 'utf-8');
+        if(dynamicJsPath) {
+            newFiles[dynamicJsPath] = Buffer.from(newDynamicJsContent, 'utf-8');
+        }
+
 
         let variationHtmlFile : string | null = null;
         let variationHtmlContent: string = '';
