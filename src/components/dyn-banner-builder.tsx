@@ -84,6 +84,7 @@ export function DynBannerBuilder() {
             }
             const csvText = await response.text();
             const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+            console.log(`Columns for sheet tab "${tab}":`, parsed.meta.fields);
             newSheetData[url][tab] = parsed.data;
         }
       }
