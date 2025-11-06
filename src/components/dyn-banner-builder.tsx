@@ -12,7 +12,7 @@ import {
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { Wand2, Loader2, Database, RefreshCw, Sheet, Archive } from 'lucide-react';
+import { Wand2, Loader2, Database, RefreshCw, Sheet, Archive, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   Select,
@@ -26,6 +26,9 @@ import type { BannerVariation, Tier } from './banner-render-grid';
 import { BannerPreviewCard } from './banner-preview-card';
 import Papa from 'papaparse';
 import { FileUploadZone } from './file-upload-zone';
+import JSZip from 'jszip';
+import path from 'path';
+
 
 type SheetData = Record<string, Record<string, any[]>>; // { sheetUrl -> { tabName -> [rows] } }
 
@@ -180,6 +183,55 @@ export function DynBannerBuilder() {
 
   };
   
+    const handleDownloadAll = async () => {
+    if (bannerVariations.length === 0) return;
+    
+    setIsLoading(true);
+    setLoadingMessage("Preparing all previews for download...");
+    
+    try {
+        const zip = new JSZip();
+
+        const downloadPromises = bannerVariations.map(async (variation) => {
+            const folder = zip.folder(variation.name);
+            if(folder){
+                try {
+                    const response = await fetch(`/api/download/${variation.bannerId}`);
+                    if (!response.ok) {
+                        console.error(`Failed to fetch files for ${variation.name}`);
+                        return;
+                    }
+                    const filesZip = await JSZip.loadAsync(await response.arrayBuffer());
+                    for (const filename in filesZip.files) {
+                        if (!filename.startsWith('__MACOSX/')) {
+                            const fileData = await filesZip.files[filename].async('nodebuffer');
+                            folder.file(path.basename(filename), fileData);
+                        }
+                    }
+                } catch (error) {
+                    console.error(`Error downloading variation ${variation.name}:`, error);
+                }
+            }
+        });
+    
+        await Promise.all(downloadPromises);
+
+        const blob = await zip.generateAsync({ type: "blob" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `Banner_Previews.zip`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+    } catch (error) {
+        console.error("Failed to create master zip:", error);
+        toast({ title: "Error", description: "Could not prepare files for download.", variant: "destructive" });
+    } finally {
+        setIsLoading(false);
+    }
+  };
+
   const hasData = Object.keys(sheetData).length > 0;
 
   return (
@@ -325,9 +377,14 @@ export function DynBannerBuilder() {
                 <h3 className="text-3xl font-bold font-headline text-center sm:text-left">
                    Generated Previews
                 </h3>
-                <Button onClick={() => setBannerVariations([])} variant="outline">
-                    <RefreshCw className="mr-2" /> Clear Previews
-                </Button>
+                <div className="flex items-center gap-2">
+                    <Button onClick={() => setBannerVariations([])} variant="outline">
+                        <RefreshCw className="mr-2" /> Clear Previews
+                    </Button>
+                     <Button onClick={handleDownloadAll} disabled={isLoading}>
+                        <Download className="mr-2" /> Download All ({bannerVariations.length})
+                    </Button>
+                </div>
             </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 justify-center">
             {bannerVariations.map((variation) => (
