@@ -87,8 +87,16 @@ export async function POST(req: NextRequest) {
                         let valueToSet = dataRow[key];
 
                         // Prepend base path if it's an image
-                        if (baseFolderPath && valueToSet && typeof valueToSet === 'string' && (valueToSet.endsWith('.jpg') || valueToSet.endsWith('.png') || valueToSet.endsWith('.svg'))) {
+                        const isImage = valueToSet && typeof valueToSet === 'string' && (valueToSet.endsWith('.jpg') || valueToSet.endsWith('.png') || valueToSet.endsWith('.svg'));
+                        
+                        if (isImage) {
+                            console.log(`[Image Debug] Original value for ${key}:`, valueToSet);
+                            console.log(`[Image Debug] Base folder path:`, baseFolderPath);
+                        }
+
+                        if (baseFolderPath && isImage) {
                             valueToSet = baseFolderPath + valueToSet;
+                             console.log(`[Image Debug] Final value for ${key}:`, valueToSet);
                         }
 
                         // Reconstruct the entire line to ensure valid syntax
