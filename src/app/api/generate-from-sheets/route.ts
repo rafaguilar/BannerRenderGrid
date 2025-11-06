@@ -69,41 +69,48 @@ export async function POST(req: NextRequest) {
             'OMS[0]': omsData,
         };
         
-        // Force set the TIER first as it might be used by other logic
-        const tierVarPath = 'devDynamicContent.parent[0].TIER';
-        const tierRegex = new RegExp(`(${tierVarPath.replace(/\[/g, '\\[').replace(/\]/g, '\\]').replace(/\./g, '\\.')}\\s*=\\s*)['"](.*?)['"]`);
-        if (tierRegex.test(newDynamicJsContent)) {
-             newDynamicJsContent = newDynamicJsContent.replace(tierRegex, `$1'${tier}'`);
-        } else {
-             console.warn(`Could not find TIER variable to replace.`);
-        }
-
-
         // Robustly replace variable values
-        for (const [objPath, dataRow] of Object.entries(combinedData)) {
-            for (const key in dataRow) {
-                 const value = dataRow[key];
-                 if (value === undefined || value === null) continue;
-                 
-                 const fullVariablePath = `devDynamicContent.${objPath}.${key}`;
-                 
-                 // Escape special characters in the variable path for use in the regex
-                 const escapedVarPath = fullVariablePath.replace(/\[/g, '\\[').replace(/\]/g, '\\]').replace(/\./g, '\\.');
+        const jsLines = newDynamicJsContent.split('\n');
 
-                 // Regex to find the assignment and replace only the value part.
-                 // It handles single quotes, double quotes, and unquoted values.
-                 const valueRegex = new RegExp(`(${escapedVarPath}\\s*=\\s*)(?:'[^']*'|"[^"]*"|[^;]+)(;?)`, 'm');
-                 
-                 if (valueRegex.test(newDynamicJsContent)) {
-                     // Reconstruct the assignment with a properly escaped new value.
-                     const escapedValue = String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-                     const replacement = `$1'${escapedValue}'$2`;
-                     newDynamicJsContent = newDynamicJsContent.replace(valueRegex, replacement);
-                 } else {
-                     console.warn(`Could not find assignment for "${fullVariablePath}" in Dynamic.js to perform replacement.`);
-                 }
+        const escapeJS = (value: any) => {
+          if (value === null || value === undefined) return '';
+          return String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        };
+
+        const newJsLines = jsLines.map(line => {
+            let modifiedLine = line;
+            for (const [objPath, dataRow] of Object.entries(combinedData)) {
+                for (const key in dataRow) {
+                    const fullVariablePath = `devDynamicContent.${objPath}.${key}`;
+                    if (modifiedLine.includes(fullVariablePath)) {
+                        const valueToSet = dataRow[key];
+                        // Reconstruct the entire line to ensure valid syntax
+                        const lineStart = modifiedLine.substring(0, modifiedLine.indexOf('=') + 1);
+                        modifiedLine = `${lineStart} '${escapeJS(valueToSet)}';`;
+                        break; 
+                    }
+                }
+            }
+            return modifiedLine;
+        });
+
+        // Set TIER separately to ensure it's correct
+        const tierVarPath = 'devDynamicContent.parent[0].TIER';
+        let tierSet = false;
+        for (let i = 0; i < newJsLines.length; i++) {
+            if (newJsLines[i].includes(tierVarPath)) {
+                const lineStart = newJsLines[i].substring(0, newJsLines[i].indexOf('=') + 1);
+                newJsLines[i] = `${lineStart} '${tier}';`;
+                tierSet = true;
+                break;
             }
         }
+
+        if (!tierSet) {
+            console.warn('Could not find TIER variable to set.');
+        }
+
+        newDynamicJsContent = newJsLines.join('\n');
         
         // 3. Create a new temp dir for this variation and write files
         const bannerId = generateUniqueId();
