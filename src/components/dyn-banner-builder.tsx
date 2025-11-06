@@ -27,7 +27,6 @@ import { BannerPreviewCard } from './banner-preview-card';
 import Papa from 'papaparse';
 import { FileUploadZone } from './file-upload-zone';
 import JSZip from 'jszip';
-import path from 'path';
 
 
 type SheetData = Record<string, Record<string, any[]>>; // { sheetUrl -> { tabName -> [rows] } }
@@ -191,6 +190,7 @@ export function DynBannerBuilder() {
     
     try {
         const zip = new JSZip();
+        const basename = (p: string) => p.split(/[\\/]/).pop() || '';
 
         const downloadPromises = bannerVariations.map(async (variation) => {
             const folder = zip.folder(variation.name);
@@ -205,7 +205,7 @@ export function DynBannerBuilder() {
                     for (const filename in filesZip.files) {
                         if (!filename.startsWith('__MACOSX/')) {
                             const fileData = await filesZip.files[filename].async('nodebuffer');
-                            folder.file(path.basename(filename), fileData);
+                            folder.file(basename(filename), fileData);
                         }
                     }
                 } catch (error) {
