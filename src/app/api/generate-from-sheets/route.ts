@@ -71,12 +71,11 @@ export async function POST(req: NextRequest) {
         
         // Force set the TIER first as it might be used by other logic
         const tierVarPath = 'devDynamicContent.parent[0].TIER';
-        const tierRegex = new RegExp(`^.*${tierVarPath.replace(/\[/g, '\\[').replace(/\]/g, '\\]').replace(/\./g, '\\.')}.*$`, 'm');
-        const tierReplacementLine = `${tierVarPath} = '${tier}';`;
+        const tierRegex = new RegExp(`(${tierVarPath.replace(/\[/g, '\\[').replace(/\]/g, '\\]').replace(/\./g, '\\.')}\\s*=\\s*)['"](.*?)['"]`);
         if (tierRegex.test(newDynamicJsContent)) {
-            newDynamicJsContent = newDynamicJsContent.replace(tierRegex, tierReplacementLine);
+             newDynamicJsContent = newDynamicJsContent.replace(tierRegex, `$1'${tier}'`);
         } else {
-            console.warn(`Could not find TIER variable line to replace.`);
+             console.warn(`Could not find TIER variable to replace.`);
         }
 
 
@@ -91,16 +90,17 @@ export async function POST(req: NextRequest) {
                  // Escape special characters in the variable path for use in the regex
                  const escapedVarPath = fullVariablePath.replace(/\[/g, '\\[').replace(/\]/g, '\\]').replace(/\./g, '\\.');
 
-                 // Regex to find the entire line of the variable assignment
-                 const lineRegex = new RegExp(`^.*${escapedVarPath}.*$`, 'm');
-
-                 if (lineRegex.test(newDynamicJsContent)) {
-                     // Reconstruct the entire line to ensure valid syntax
+                 // Regex to find the assignment and replace only the value part.
+                 // It handles single quotes, double quotes, and unquoted values.
+                 const valueRegex = new RegExp(`(${escapedVarPath}\\s*=\\s*)(?:'[^']*'|"[^"]*"|[^;]+)(;?)`, 'm');
+                 
+                 if (valueRegex.test(newDynamicJsContent)) {
+                     // Reconstruct the assignment with a properly escaped new value.
                      const escapedValue = String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-                     const replacementLine = `${fullVariablePath} = '${escapedValue}';`;
-                     newDynamicJsContent = newDynamicJsContent.replace(lineRegex, replacementLine);
+                     const replacement = `$1'${escapedValue}'$2`;
+                     newDynamicJsContent = newDynamicJsContent.replace(valueRegex, replacement);
                  } else {
-                     console.warn(`Could not find line for "${fullVariablePath}" in Dynamic.js to perform replacement.`);
+                     console.warn(`Could not find assignment for "${fullVariablePath}" in Dynamic.js to perform replacement.`);
                  }
             }
         }
