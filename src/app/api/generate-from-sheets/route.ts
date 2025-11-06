@@ -69,10 +69,14 @@ export async function POST(req: NextRequest) {
             'OMS[0]': omsData,
         };
         
-        // Force set the TIER first
-        const tierRegex = new RegExp(`(devDynamicContent\\.parent\\[0\\]\\.TIER\\s*=\\s*['"])([^'"]*)(['"]?)`);
+        // Force set the TIER first as it might be used by other logic
+        const tierVarPath = 'devDynamicContent.parent[0].TIER';
+        const tierRegex = new RegExp(`^.*${tierVarPath.replace(/\[/g, '\\[').replace(/\]/g, '\\]').replace(/\./g, '\\.')}.*$`, 'm');
+        const tierReplacementLine = `${tierVarPath} = '${tier}';`;
         if (tierRegex.test(newDynamicJsContent)) {
-             newDynamicJsContent = newDynamicJsContent.replace(tierRegex, `$1${tier}$3`);
+            newDynamicJsContent = newDynamicJsContent.replace(tierRegex, tierReplacementLine);
+        } else {
+            console.warn(`Could not find TIER variable line to replace.`);
         }
 
 
@@ -87,15 +91,16 @@ export async function POST(req: NextRequest) {
                  // Escape special characters in the variable path for use in the regex
                  const escapedVarPath = fullVariablePath.replace(/\[/g, '\\[').replace(/\]/g, '\\]').replace(/\./g, '\\.');
 
-                 // Regex to find the variable assignment and replace its value
-                 // It handles single quotes, double quotes, or no quotes for the original value
-                 const regex = new RegExp(`(${escapedVarPath}\\s*=\\s*)(?:['"]?)(.*?)(?:['"]?)(;.*|$)`, 'm');
+                 // Regex to find the entire line of the variable assignment
+                 const lineRegex = new RegExp(`^.*${escapedVarPath}.*$`, 'm');
 
-                 if (regex.test(newDynamicJsContent)) {
+                 if (lineRegex.test(newDynamicJsContent)) {
+                     // Reconstruct the entire line to ensure valid syntax
                      const escapedValue = String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-                     newDynamicJsContent = newDynamicJsContent.replace(regex, `$1'${escapedValue}'$3`);
+                     const replacementLine = `${fullVariablePath} = '${escapedValue}';`;
+                     newDynamicJsContent = newDynamicJsContent.replace(lineRegex, replacementLine);
                  } else {
-                     console.warn(`Could not find "${fullVariablePath}" in Dynamic.js to perform replacement.`);
+                     console.warn(`Could not find line for "${fullVariablePath}" in Dynamic.js to perform replacement.`);
                  }
             }
         }
