@@ -45,10 +45,12 @@ export function DynBannerBuilder() {
   const [parentTab, setParentTab] = useState('parent');
   const [creativeTab, setCreativeTab] = useState('creative_data');
   const [omsTab, setOmsTab] = useState('Jeep');
+  
+  const [parentId, setParentId] = useState('');
+  const [creativeId, setCreativeId] = useState('');
+  const [omsId, setOmsId] = useState('');
 
-  const [parentRow, setParentRow] = useState(1);
-  const [creativeRow, setCreativeRow] = useState(1);
-  const [omsRow, setOmsRow] = useState(1);
+
   
   const [bannerVariations, setBannerVariations] = useState<BannerVariation[]>([]);
   const [templateFile, setTemplateFile] = useState<File | null>(null);
@@ -72,23 +74,28 @@ export function DynBannerBuilder() {
         
         // This is a simplified example; a real implementation would need to parse all tabs.
         // For this case, we are fetching specific hardcoded tabs.
-        const tabsToFetch = url === parentSheetUrl ? ['parent', 'creative_data'] : ['Jeep'];
+        const tabsToFetch = url === parentSheetUrl ? ['parent', 'creative_data'] : ['Jeep', 'Dodge', 'Ram', 'Chrysler', 'Fiat', 'AlfaRomeo'];
         
         for (const tab of tabsToFetch) {
-            const response = await fetch('/api/gsheet', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sheetUrl: url, sheetName: tab }),
-            });
+            try {
+                const response = await fetch('/api/gsheet', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sheetUrl: url, sheetName: tab }),
+                });
 
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(`Failed to fetch tab "${tab}": ${error.error}`);
+                if (!response.ok) {
+                    const error = await response.json();
+                    // Don't throw error, just warn, so other tabs can still load.
+                    console.warn(`Could not fetch tab "${tab}": ${error.error}`);
+                    continue;
+                }
+                const csvText = await response.text();
+                const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+                newSheetData[url][tab] = parsed.data;
+            } catch (e) {
+                 console.warn(`Error fetching or parsing tab "${tab}"`, e);
             }
-            const csvText = await response.text();
-            const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
-            console.log(`Columns for sheet tab "${tab}":`, parsed.meta.fields);
-            newSheetData[url][tab] = parsed.data;
         }
       }
       setSheetData(newSheetData);
@@ -146,20 +153,34 @@ export function DynBannerBuilder() {
     setLoadingMessage('Generating banner preview...');
     
     try {
+        const findRowById = (data: any[] | undefined, id: string): Record<string, any> => {
+            if (!data) return {};
+            // The 'ID' column might be capitalized differently
+            const row = data.find(r => String(r.id).trim() === id.trim() || String(r.ID).trim() === id.trim());
+            return row || {};
+        }
+
+        const parentData = findRowById(sheetData[parentSheetUrl]?.[parentTab], parentId);
+        const creativeData = findRowById(sheetData[parentSheetUrl]?.[creativeTab], creativeId);
+        const omsData = findRowById(sheetData[omsSheetUrl]?.[omsTab], omsId);
+        
+        if (Object.keys(parentData).length === 0) throw new Error(`Could not find Parent data with ID: ${parentId}`);
+        if (Object.keys(creativeData).length === 0) throw new Error(`Could not find Creative data with ID: ${creativeId}`);
+        if (Object.keys(omsData).length === 0) throw new Error(`Could not find OMS data with ID: ${omsId} in tab ${omsTab}`);
+
+
         const formData = new FormData();
         formData.append('template', templateFile);
         formData.append('dynamicJsContent', dynamicJsContent);
         formData.append('tier', selectedTier);
         formData.append('baseFolderPath', baseFolderPath);
         
-        // Parent Data
-        formData.append('parentData', JSON.stringify(sheetData[parentSheetUrl]?.[parentTab]?.[parentRow - 1] || {}));
-        
-        // Creative Data
-        formData.append('creativeData', JSON.stringify(sheetData[parentSheetUrl]?.[creativeTab]?.[creativeRow - 1] || {}));
+        // Send the found data objects
+        formData.append('parentData', JSON.stringify(parentData));
+        formData.append('creativeData', JSON.stringify(creativeData));
 
-        // OMS Data
-        formData.append('omsData', JSON.stringify(sheetData[omsSheetUrl]?.[omsTab]?.[omsRow - 1] || {}));
+        // For OMS, we might need to adjust based on tier. Assuming direct lookup for now.
+        formData.append('omsData', JSON.stringify(omsData));
         
         const response = await fetch('/api/generate-from-sheets', {
             method: 'POST',
@@ -192,8 +213,7 @@ export function DynBannerBuilder() {
     
     try {
         const zip = new JSZip();
-        const basename = (p: string) => p.split(/[\\/]/).pop() || '';
-
+        
         const downloadPromises = bannerVariations.map(async (variation) => {
             const folder = zip.folder(variation.name);
             if(folder){
@@ -206,8 +226,9 @@ export function DynBannerBuilder() {
                     const filesZip = await JSZip.loadAsync(await response.arrayBuffer());
                     for (const filename in filesZip.files) {
                         if (!filename.startsWith('__MACOSX/')) {
+                             const cleanFilename = filename.split('/').pop() || filename;
                             const fileData = await filesZip.files[filename].async('nodebuffer');
-                            folder.file(basename(filename), fileData);
+                            folder.file(cleanFilename, fileData);
                         }
                     }
                 } catch (error) {
@@ -294,7 +315,7 @@ export function DynBannerBuilder() {
              </div>
           </CardContent>
            <CardFooter>
-            <Button onClick={handleFetchData} disabled={isLoading || !templateFile} className="ml-auto">
+            <Button onClick={handleFetchData} disabled={isLoading} className="ml-auto">
               {isLoading && loadingMessage.includes('Fetching') ? <Loader2 className="animate-spin mr-2" /> : <Sheet className="mr-2"/>}
               Fetch Sheet Data
             </Button>
@@ -304,9 +325,9 @@ export function DynBannerBuilder() {
         {hasData && (
           <Card>
             <CardHeader>
-              <CardTitle className="font-headline">2. Select Data Rows</CardTitle>
+              <CardTitle className="font-headline">2. Select Data by ID</CardTitle>
               <CardDescription>
-                Choose the Tier, tabs, and specific rows to build your banner.
+                Choose the Tier, tabs, and specific IDs to build your banner.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -319,11 +340,11 @@ export function DynBannerBuilder() {
                     </RadioGroup>
                 </div>
 
-                {/* ROW SELECTION */}
+                {/* ID SELECTION */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Parent */}
                     <div className="p-4 border rounded-lg space-y-2">
-                        <Label className="font-medium">Parent Data</Label>
+                        <Label className="font-medium" htmlFor="parent-id">Parent Data</Label>
                         <div className="flex gap-2">
                             <Select value={parentTab} onValueChange={setParentTab}>
                                 <SelectTrigger><SelectValue placeholder="Select tab..." /></SelectTrigger>
@@ -331,12 +352,12 @@ export function DynBannerBuilder() {
                                     {availableParentTabs.filter(t => t === 'parent').map(tab => <SelectItem key={tab} value={tab}>{tab}</SelectItem>)}
                                 </SelectContent>
                             </Select>
-                            <Input type="number" value={parentRow} onChange={e => setParentRow(Math.max(1, parseInt(e.target.value) || 1))} className="w-24" />
+                            <Input id="parent-id" type="text" placeholder="Enter ID" value={parentId} onChange={e => setParentId(e.target.value)} className="w-24" />
                         </div>
                     </div>
                     {/* Creative */}
                      <div className="p-4 border rounded-lg space-y-2">
-                        <Label className="font-medium">Creative Data</Label>
+                        <Label className="font-medium" htmlFor="creative-id">Creative Data</Label>
                         <div className="flex gap-2">
                             <Select value={creativeTab} onValueChange={setCreativeTab}>
                                 <SelectTrigger><SelectValue placeholder="Select tab..." /></SelectTrigger>
@@ -344,30 +365,30 @@ export function DynBannerBuilder() {
                                     {availableParentTabs.filter(t => t === 'creative_data').map(tab => <SelectItem key={tab} value={tab}>{tab}</SelectItem>)}
                                 </SelectContent>
                             </Select>
-                            <Input type="number" value={creativeRow} onChange={e => setCreativeRow(Math.max(1, parseInt(e.target.value) || 1))} className="w-24" />
+                            <Input id="creative-id" type="text" placeholder="Enter ID" value={creativeId} onChange={e => setCreativeId(e.target.value)} className="w-24" />
                         </div>
                     </div>
                 </div>
 
                  {/* OMS */}
                  <div className="p-4 border rounded-lg space-y-2">
-                    <Label className="font-medium">OMS Data</Label>
+                    <Label className="font-medium" htmlFor="oms-id">OMS Data</Label>
                     <div className="flex gap-2">
                         <Select value={omsTab} onValueChange={setOmsTab}>
-                            <SelectTrigger><SelectValue placeholder="Select tab..." /></SelectTrigger>
+                            <SelectTrigger><SelectValue placeholder="Select brand..." /></SelectTrigger>
                             <SelectContent>
                                 {availableOmsTabs.map(tab => <SelectItem key={tab} value={tab}>{tab}</SelectItem>)}
                             </SelectContent>
                         </Select>
-                        <Input type="number" value={omsRow} onChange={e => setOmsRow(Math.max(1, parseInt(e.target.value) || 1))} className="w-24" />
+                        <Input id="oms-id" type="text" placeholder="Enter ID" value={omsId} onChange={e => setOmsId(e.target.value)} className="w-24" />
                     </div>
                 </div>
                  <p className="text-xs text-muted-foreground px-1">
-                    Note: The row number corresponds to the data row in the sheet, excluding the header. If your sheet has hidden or empty rows, the number may not match the visible row number in Google Sheets.
+                    Enter the value from the 'id' or 'ID' column for the data you wish to use.
                 </p>
             </CardContent>
              <CardFooter>
-                <Button onClick={handleGenerate} disabled={isLoading} className="ml-auto" size="lg">
+                <Button onClick={handleGenerate} disabled={isLoading || !parentId || !creativeId || !omsId } className="ml-auto" size="lg">
                     {isLoading && !loadingMessage.includes('Fetching') ? <Loader2 className="animate-spin mr-2" /> : <Wand2 className="mr-2" />}
                     Generate Preview
                 </Button>

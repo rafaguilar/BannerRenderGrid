@@ -70,12 +70,11 @@ export async function POST(req: NextRequest) {
             'OMS[0]': omsData,
         };
         
-        // Robustly replace variable values
         const jsLines = newDynamicJsContent.split('\n');
 
         const escapeJS = (value: any): string => {
-          if (value === null || value === undefined) return '';
-          return String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+            if (value === null || value === undefined) return '';
+            return String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
         };
 
         const newJsLines = jsLines.map(line => {
@@ -84,42 +83,35 @@ export async function POST(req: NextRequest) {
             for (const [objPath, dataRow] of Object.entries(combinedData)) {
                 if (lineModified) break;
                 for (const key in dataRow) {
-                    
-                    const valueToSet = dataRow[key];
-                    const valueAsString = String(valueToSet || '').trim();
-                    const isImage = valueAsString.endsWith('.jpg') || valueAsString.endsWith('.png') || valueAsString.endsWith('.svg');
-
-                    // Construct the variable path to search for in the JS file
+                    const valueToSet = String(dataRow[key] || '').trim();
                     const varPath = `devDynamicContent.${objPath}.${key}`;
+                    const isImage = valueToSet.endsWith('.jpg') || valueToSet.endsWith('.png') || valueToSet.endsWith('.svg');
 
                     if (isImage) {
-                         // For images, we target the `.Url` property
                         const fullVariablePath = `${varPath}.Url`;
                         if (modifiedLine.includes(fullVariablePath)) {
-                            let finalUrl = valueAsString;
+                            let finalUrl = valueToSet;
                             if (baseFolderPath) {
-                                finalUrl = baseFolderPath + valueAsString;
+                                finalUrl = baseFolderPath + valueToSet;
                             }
-                            const lineStart = modifiedLine.substring(0, modifiedLine.indexOf('=') + 1);
-                            modifiedLine = `${lineStart} '${escapeJS(finalUrl)}';`;
-                            lineModified = true;
-                            break; 
+                             const lineStart = modifiedLine.substring(0, modifiedLine.indexOf('=') + 1);
+                             modifiedLine = `${lineStart} '${escapeJS(finalUrl)}';`;
+                             lineModified = true;
+                             break;
                         }
                     } else {
-                        // For non-images, we target the variable itself
-                        if (modifiedLine.includes(varPath) && !modifiedLine.includes(`${varPath}.`)) {
+                         if (modifiedLine.includes(varPath) && !modifiedLine.includes(`${varPath}.`)) {
                            const lineStart = modifiedLine.substring(0, modifiedLine.indexOf('=') + 1);
                            modifiedLine = `${lineStart} '${escapeJS(valueToSet)}';`;
                            lineModified = true;
-                           break; 
+                           break;
                         }
                     }
                 }
             }
             return modifiedLine;
         });
-
-        // Set TIER separately to ensure it's correct
+        
         const tierVarPath = 'devDynamicContent.parent[0].TIER';
         let tierSet = false;
         for (let i = 0; i < newJsLines.length; i++) {
@@ -130,11 +122,7 @@ export async function POST(req: NextRequest) {
                 break;
             }
         }
-
-        if (!tierSet) {
-            console.warn('Could not find TIER variable to set.');
-        }
-
+        
         newDynamicJsContent = newJsLines.join('\n');
         
         // 3. Create a new temp dir for this variation and write files
