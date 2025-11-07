@@ -85,28 +85,41 @@ export async function POST(req: NextRequest) {
                 for (const key in dataRow) {
                     const valueToSet = String(dataRow[key] || '');
                     
-                    const trimmedValue = valueToSet.trim();
-                    const isImage = trimmedValue.endsWith('.jpg') || trimmedValue.endsWith('.png') || trimmedValue.endsWith('.svg');
+                    const isT2JsonField = tier === 'T2' && (key === 'customGroups' || key === 'rd_values' || key === 'rd-values');
 
-                    if (isImage) {
-                         const varPathWithUrl = `devDynamicContent.${objPath}.${key}.Url`;
-                         if (modifiedLine.includes(varPathWithUrl)) {
-                            let finalUrl = trimmedValue;
-                            if (baseFolderPath) {
-                                finalUrl = baseFolderPath + trimmedValue;
-                            }
-                             const lineStart = modifiedLine.substring(0, modifiedLine.indexOf('=') + 1);
-                             modifiedLine = `${lineStart} '${escapeJS(finalUrl)}';`;
-                             lineModified = true;
-                             break; 
-                        }
-                    } else {
+                    if (isT2JsonField) {
                          const varPath = `devDynamicContent.${objPath}.${key}`;
                          if (modifiedLine.includes(varPath) && !modifiedLine.includes(`${varPath}.`)) {
-                           const lineStart = modifiedLine.substring(0, modifiedLine.indexOf('=') + 1);
-                           modifiedLine = `${lineStart} '${escapeJS(valueToSet)}';`;
-                           lineModified = true;
-                           break;
+                            const lineStart = modifiedLine.substring(0, modifiedLine.indexOf('=') + 1);
+                            // For these fields, the value is a JSON string. We wrap it in single quotes.
+                            modifiedLine = `${lineStart} '${valueToSet}';`;
+                            lineModified = true;
+                            break;
+                         }
+                    } else {
+                        const trimmedValue = valueToSet.trim();
+                        const isImage = trimmedValue.endsWith('.jpg') || trimmedValue.endsWith('.png') || trimmedValue.endsWith('.svg');
+
+                        if (isImage) {
+                             const varPathWithUrl = `devDynamicContent.${objPath}.${key}.Url`;
+                             if (modifiedLine.includes(varPathWithUrl)) {
+                                let finalUrl = trimmedValue;
+                                if (baseFolderPath) {
+                                    finalUrl = baseFolderPath + trimmedValue;
+                                }
+                                 const lineStart = modifiedLine.substring(0, modifiedLine.indexOf('=') + 1);
+                                 modifiedLine = `${lineStart} '${escapeJS(finalUrl)}';`;
+                                 lineModified = true;
+                                 break; 
+                            }
+                        } else {
+                             const varPath = `devDynamicContent.${objPath}.${key}`;
+                             if (modifiedLine.includes(varPath) && !modifiedLine.includes(`${varPath}.`)) {
+                               const lineStart = modifiedLine.substring(0, modifiedLine.indexOf('=') + 1);
+                               modifiedLine = `${lineStart} '${escapeJS(valueToSet)}';`;
+                               lineModified = true;
+                               break;
+                            }
                         }
                     }
                 }
