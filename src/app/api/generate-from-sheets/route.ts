@@ -15,6 +15,13 @@ const getAdSize = (htmlContent: string): { width: number, height: number } => {
     return { width: 300, height: 250 };
 }
 
+// Helper to safely create a JS string literal.
+const safeStringify = (value: any): string => {
+    if (value === null || value === undefined) return "''";
+    // Using JSON.stringify is the most robust way to escape characters for JS.
+    return JSON.stringify(String(value));
+}
+
 
 export async function POST(req: NextRequest) {
     try {
@@ -72,70 +79,56 @@ export async function POST(req: NextRequest) {
         
         const jsLines = newDynamicJsContent.split('\n');
 
-        const escapeJS = (value: any): string => {
-            if (value === null || value === undefined) return '';
-            return String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-        };
-        
         const newJsLines = jsLines.map(line => {
             let modifiedLine = line;
-            let lineModified = false;
+            // Iterate over each data object (parent, creative, oms)
             for (const [objPath, dataRow] of Object.entries(combinedData)) {
-                if (lineModified) break;
+                 // Iterate over each key/value pair in the data row
                 for (const key in dataRow) {
-                    const valueToSet = String(dataRow[key] || '');
+                    // Construct the full JS variable path we're looking for
+                    const varPath = `devDynamicContent.${objPath}.${key}`;
+                    const regex = new RegExp(`(${varPath.replace(/\[/g, '\\[').replace(/\]/g, '\\]')}\\s*=\\s*).*;`);
                     
-                    const isT2JsonField = tier === 'T2' && (key === 'customGroups' || key === 'rd_values' || key === 'rd-values');
-                    const isOmsImage = objPath === 'OMS[0]' && key === 'vehname';
+                    // Check if the current line matches the variable we want to replace
+                    if (regex.test(modifiedLine)) {
+                        const valueToSet = dataRow[key];
 
-                    if (isT2JsonField) {
-                         const varPath = `devDynamicContent.${objPath}.${key}`;
-                         if (modifiedLine.includes(varPath) && !modifiedLine.includes(`${varPath}.`)) {
-                            const lineStart = modifiedLine.substring(0, modifiedLine.indexOf('=') + 1);
-                            // For these fields, the value is a JSON string. We wrap it in single quotes.
-                            modifiedLine = `${lineStart} '${valueToSet}';`;
-                            lineModified = true;
-                            break;
-                         }
-                    } else {
-                        const trimmedValue = valueToSet.trim();
+                        // SPECIAL HANDLING for complex JSON strings.
+                        // These are already strings, but we need to ensure they are injected correctly.
+                        if (tier === 'T2' && (key === 'customGroups' || key === 'rd_values' || key === 'rd-values')) {
+                            // The value is a string that contains JSON. We must stringify it to escape it properly for JS.
+                            const replacementValue = JSON.stringify(valueToSet || '[]');
+                            modifiedLine = line.replace(regex, `$1${replacementValue};`);
+                            return modifiedLine; // Exit early, line is processed.
+                        }
+                        
+                        // STANDARD HANDLING for simple strings and images
+                        const trimmedValue = String(valueToSet || '').trim();
                         const isImage = trimmedValue.endsWith('.jpg') || trimmedValue.endsWith('.png') || trimmedValue.endsWith('.svg');
-
+                        
                         if (isImage) {
-                            let varPathWithUrl: string | null = null;
-                            if (isOmsImage) {
-                                // Specific handling for OMS vehname image
-                                varPathWithUrl = `devDynamicContent.${objPath}.${key}.Url`;
-                            } else if (objPath !== 'OMS[0]') {
-                                // General image handling for other objects
-                                varPathWithUrl = `devDynamicContent.${objPath}.${key}.Url`;
-                            }
-
-                             if (varPathWithUrl && modifiedLine.includes(varPathWithUrl)) {
+                             const imageVarPath = `${varPath}.Url`;
+                             const imageRegex = new RegExp(`(${imageVarPath.replace(/\[/g, '\\[').replace(/\]/g, '\\]')}\\s*=\\s*).*;`);
+                             if (imageRegex.test(line)) {
                                 let finalUrl = trimmedValue;
-                                if (baseFolderPath) {
+                                if (baseFolderPath && !trimmedValue.startsWith('http')) {
                                     finalUrl = baseFolderPath + trimmedValue;
                                 }
-                                 const lineStart = modifiedLine.substring(0, modifiedLine.indexOf('=') + 1);
-                                 modifiedLine = `${lineStart} '${escapeJS(finalUrl)}';`;
-                                 lineModified = true;
-                                 break; 
-                            }
+                                modifiedLine = line.replace(imageRegex, `$1${safeStringify(finalUrl)};`);
+                                return modifiedLine; // Exit early
+                             }
                         } else {
-                             const varPath = `devDynamicContent.${objPath}.${key}`;
-                             if (modifiedLine.includes(varPath) && !modifiedLine.includes(`${varPath}.`)) {
-                               const lineStart = modifiedLine.substring(0, modifiedLine.indexOf('=') + 1);
-                               modifiedLine = `${lineStart} '${escapeJS(valueToSet)}';`;
-                               lineModified = true;
-                               break;
-                            }
+                            // It's a simple string value, use safeStringify
+                            modifiedLine = line.replace(regex, `$1${safeStringify(valueToSet)};`);
+                            return modifiedLine; // Exit early
                         }
                     }
                 }
             }
-            return modifiedLine;
+            return modifiedLine; // Return original line if no match
         });
         
+        // Final pass for the TIER variable
         const tierVarPath = 'devDynamicContent.parent[0].TIER';
         let tierSet = false;
         for (let i = 0; i < newJsLines.length; i++) {
