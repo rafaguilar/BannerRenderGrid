@@ -79,6 +79,13 @@ export async function POST(req: NextRequest) {
                 'creative_data[0]': creativeData,
                 'OMS[0]': omsData,
             };
+
+             if (tier === 'T2') {
+                console.log(`--- T2 Data for OMS ID: ${omsData?.id || omsData?.ID} ---`);
+                console.log("customGroups from sheet:", omsData?.customGroups);
+                console.log("rd_values from sheet:", omsData?.['rd-values'] || omsData?.rd_values);
+                console.log("-------------------------------------------------");
+            }
             
             const jsLines = newDynamicJsContent.split('\n');
 
@@ -87,21 +94,30 @@ export async function POST(req: NextRequest) {
                 // Iterate over each data object (parent, creative, oms)
                 for (const [objPath, dataRow] of Object.entries(combinedData)) {
                      if (!dataRow) continue;
+
+                     // SPECIAL HANDLING for complex JSON strings, ONLY for T2
+                     if (tier === 'T2' && objPath === 'OMS[0]') {
+                        const customGroupsValue = dataRow.customGroups;
+                        const rdValuesValue = dataRow['rd-values'] || dataRow.rd_values;
+
+                        const customGroupsVarPath = 'devDynamicContent.OMS[0].customGroups';
+                        const customGroupsRegex = new RegExp(`(${customGroupsVarPath.replace(/\[/g, '\\[').replace(/\]/g, '\\]')}\\s*=\\s*).*;`);
+                        if (customGroupsRegex.test(line)) {
+                           modifiedLine = line.replace(customGroupsRegex, `$1${JSON.stringify(customGroupsValue || '[]')};`);
+                           return modifiedLine;
+                        }
+                        
+                        const rdValuesVarPath = 'devDynamicContent.OMS[0].rd_values';
+                        const rdValuesRegex = new RegExp(`(${rdValuesVarPath.replace(/\[/g, '\\[').replace(/\]/g, '\\]')}\\s*=\\s*).*;`);
+                         if (rdValuesRegex.test(line)) {
+                           modifiedLine = line.replace(rdValuesRegex, `$1${JSON.stringify(rdValuesValue || '[]')};`);
+                           return modifiedLine;
+                        }
+                     }
+
                      // Iterate over each key/value pair in the data row
                     for (const key in dataRow) {
                         const valueToSet = dataRow[key];
-
-                        // SPECIAL HANDLING for complex JSON strings, ONLY for T2
-                         if (tier === 'T2' && (key === 'customGroups' || key === 'rd_values' || key === 'rd-values')) {
-                            const varPath = `devDynamicContent.${objPath}.${key}`;
-                            const regex = new RegExp(`(${varPath.replace(/\[/g, '\\[').replace(/\]/g, '\\]')}\\s*=\\s*).*;`);
-                            if (regex.test(modifiedLine)) {
-                                // The value from the sheet is already a stringified JSON. We stringify it *again*
-                                // to create a valid JavaScript string literal containing the original stringified JSON.
-                                modifiedLine = modifiedLine.replace(regex, `$1${JSON.stringify(valueToSet || '[]')};`);
-                                return modifiedLine; // Exit early, line is processed.
-                            }
-                        }
 
                         // Regular handling for all other keys
                         const varPath = `devDynamicContent.${objPath}.${key}`;
