@@ -362,6 +362,9 @@ export function DynBannerBuilder() {
                         <Input type="number" value={omsRow} onChange={e => setOmsRow(Math.max(1, parseInt(e.target.value) || 1))} className="w-24" />
                     </div>
                 </div>
+                 <p className="text-xs text-muted-foreground px-1">
+                    Note: The row number corresponds to the data row in the sheet, excluding the header. If your sheet has hidden or empty rows, the number may not match the visible row number in Google Sheets.
+                </p>
             </CardContent>
              <CardFooter>
                 <Button onClick={handleGenerate} disabled={isLoading} className="ml-auto" size="lg">
