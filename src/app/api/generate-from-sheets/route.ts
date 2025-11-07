@@ -86,6 +86,7 @@ export async function POST(req: NextRequest) {
                     const valueToSet = String(dataRow[key] || '');
                     
                     const isT2JsonField = tier === 'T2' && (key === 'customGroups' || key === 'rd_values' || key === 'rd-values');
+                    const isOmsImage = objPath === 'OMS[0]' && key === 'vehname';
 
                     if (isT2JsonField) {
                          const varPath = `devDynamicContent.${objPath}.${key}`;
@@ -101,8 +102,16 @@ export async function POST(req: NextRequest) {
                         const isImage = trimmedValue.endsWith('.jpg') || trimmedValue.endsWith('.png') || trimmedValue.endsWith('.svg');
 
                         if (isImage) {
-                             const varPathWithUrl = `devDynamicContent.${objPath}.${key}.Url`;
-                             if (modifiedLine.includes(varPathWithUrl)) {
+                            let varPathWithUrl: string | null = null;
+                            if (isOmsImage) {
+                                // Specific handling for OMS vehname image
+                                varPathWithUrl = `devDynamicContent.${objPath}.${key}.Url`;
+                            } else if (objPath !== 'OMS[0]') {
+                                // General image handling for other objects
+                                varPathWithUrl = `devDynamicContent.${objPath}.${key}.Url`;
+                            }
+
+                             if (varPathWithUrl && modifiedLine.includes(varPathWithUrl)) {
                                 let finalUrl = trimmedValue;
                                 if (baseFolderPath) {
                                     finalUrl = baseFolderPath + trimmedValue;
