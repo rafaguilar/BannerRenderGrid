@@ -91,8 +91,7 @@ export function DynBannerBuilder() {
                     continue;
                 }
                 const csvText = await response.text();
-
-                // --- Start Debugging Logs ---
+                 
                 const tabsToLog = ["parent", "creative_data", "Jeep"];
                 if (tabsToLog.includes(tab)) {
                   const headers = csvText.split('\n')[0];
@@ -100,7 +99,6 @@ export function DynBannerBuilder() {
                   console.log(headers);
                   console.log(`----------------------------------------------------`);
                 }
-                // --- End Debugging Logs ---
 
                 const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
                 newSheetData[url][tab] = parsed.data;
@@ -174,6 +172,10 @@ export function DynBannerBuilder() {
         const parentData = findRowById(sheetData[parentSheetUrl]?.[parentTab], parentId);
         const creativeData = findRowById(sheetData[parentSheetUrl]?.[creativeTab], creativeId);
         const omsData = findRowById(sheetData[omsSheetUrl]?.[omsTab], omsId);
+
+        console.log("--- Selected Parent Data ---", parentData);
+        console.log("--- Selected Creative Data ---", creativeData);
+        console.log("--- Selected OMS Data ---", omsData);
         
         if (Object.keys(parentData).length === 0) throw new Error(`Could not find Parent data with ID: ${parentId}`);
         if (Object.keys(creativeData).length === 0) throw new Error(`Could not find Creative data with ID: ${creativeId}`);
@@ -190,7 +192,7 @@ export function DynBannerBuilder() {
         formData.append('parentData', JSON.stringify(parentData));
         formData.append('creativeData', JSON.stringify(creativeData));
 
-        // For OMS, we might need to adjust based on tier. Assuming direct lookup for now.
+        // For OMS, we might need to adjust based on tier.
         formData.append('omsData', JSON.stringify(omsData));
         
         const response = await fetch('/api/generate-from-sheets', {
