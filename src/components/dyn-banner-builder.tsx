@@ -91,6 +91,17 @@ export function DynBannerBuilder() {
                     continue;
                 }
                 const csvText = await response.text();
+
+                // --- Start Debugging Logs ---
+                const tabsToLog = ["parent", "creative_data", "Jeep"];
+                if (tabsToLog.includes(tab)) {
+                  const headers = csvText.split('\n')[0];
+                  console.log(`--- Columns for Google Sheet tab: "${tab}" ---`);
+                  console.log(headers);
+                  console.log(`----------------------------------------------------`);
+                }
+                // --- End Debugging Logs ---
+
                 const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
                 newSheetData[url][tab] = parsed.data;
             } catch (e) {
